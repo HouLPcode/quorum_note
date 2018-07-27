@@ -1547,6 +1547,7 @@ func (s *PublicTransactionPoolAPI) SendTransactionAsync(ctx context.Context, arg
 
 // GetQuorumPayload returns the contents of a private transaction
 func (s *PublicBlockChainAPI) GetQuorumPayload(digestHex string) (string, error) {
+	fmt.Println("------------GetQuorumPayload-------------------------------------")
 	if private.P == nil {
 		return "", fmt.Errorf("PrivateTransactionManager is not enabled")
 	}
@@ -1568,4 +1569,18 @@ func (s *PublicBlockChainAPI) GetQuorumPayload(digestHex string) (string, error)
 		return "", err
 	}
 	return fmt.Sprintf("0x%x", data), nil
+}
+
+type  HouFunctionAPI struct{
+	b Backend
+}
+
+func NewHouFunctionAPI(b Backend)*HouFunctionAPI{
+	return&HouFunctionAPI{
+		b:b,
+	}
+}
+
+func(s *HouFunctionAPI)Welcome(){
+	fmt.Println("test add a hou function")
 }

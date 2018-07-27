@@ -481,10 +481,11 @@ func (m Message) IsPrivate() bool {
 }
 
 func (tx *Transaction) IsPrivate() bool {
-	if tx.data.V == nil {
-		return false
-	}
-	return tx.data.V.Uint64() == 37 || tx.data.V.Uint64() == 38
+	//if tx.data.V == nil {
+	//	return false
+	//}
+	//return tx.data.V.Uint64() == 37 || tx.data.V.Uint64() == 38
+	return false
 }
 
 func (tx *Transaction) SetPrivate() {

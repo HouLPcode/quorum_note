@@ -40,9 +40,10 @@ type sigCache struct {
 
 // MakeSigner returns a Signer based on the given chain config and block number.
 func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
-	if config.IsQuorum {
-		return HomesteadSigner{}
-	}
+	//if config.IsQuorum {
+	//	return HomesteadSigner{}
+	//}
+
 	var signer Signer
 	switch {
 	case config.IsEIP155(blockNumber):
@@ -79,12 +80,14 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 		// call is not the same as used current, invalidate
 		// the cache.
 		if sigCache.signer.Equal(signer) {
+			fmt.Println("tx.from.Load err --------------------------hou")
 			return sigCache.from, nil
 		}
 	}
 
 	addr, err := signer.Sender(tx)
 	if err != nil {
+		fmt.Println("signer.Sender err----------------------hou")
 		return common.Address{}, err
 	}
 	tx.from.Store(sigCache{signer: signer, from: addr})
@@ -128,6 +131,7 @@ func (s EIP155Signer) Equal(s2 Signer) bool {
 var big8 = big.NewInt(8)
 
 func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
+	fmt.Println("EIP155Signer---hou")
 	if !tx.Protected() {
 		return HomesteadSigner{}.Sender(tx)
 	}
@@ -183,6 +187,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
+	fmt.Println("HomesteadSigner--------------------------hou")
 	return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true, tx.IsPrivate())
 }
 
@@ -223,11 +228,14 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
+	fmt.Println("FrontierSigner--------------hou")
 	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false, tx.IsPrivate())
 }
 
 func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool, isPrivate bool) (common.Address, error) {
 	if Vb.BitLen() > 8 {
+		fmt.Println("Vb.BitLen")
+		fmt.Println("TX data V ----------------hou  ",Vb)
 		return common.Address{}, ErrInvalidSig
 	}
 	var offset uint64
@@ -238,6 +246,7 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool, isPriv
 	}
 	V := byte(Vb.Uint64() - offset)
 	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
+		fmt.Println("ValidateSignatureValues")
 		return common.Address{}, ErrInvalidSig
 	}
 	// encode the snature in uncompressed format
@@ -249,9 +258,11 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool, isPriv
 	// recover the public key from the snature
 	pub, err := crypto.Ecrecover(sighash[:], sig)
 	if err != nil {
+		fmt.Println("crypto.Ecrecover")
 		return common.Address{}, err
 	}
 	if len(pub) == 0 || pub[0] != 4 {
+		fmt.Println("public err------------------hou")
 		return common.Address{}, errors.New("invalid public key")
 	}
 	var addr common.Address

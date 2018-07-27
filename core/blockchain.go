@@ -1021,17 +1021,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			return i, events, coalescedLogs, err
 		}
 		// /Quorum
-
 		// Process block using the parent state as reference point.
 		receipts, privateReceipts, logs, usedGas, err := bc.processor.Process(block, state, privateState, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
+			fmt.Println("hou--------------0")
 			return i, events, coalescedLogs, err
 		}
 
 		// Validate the state using the default validator
 		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
 		if err != nil {
+			fmt.Println("hou--------------2")
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}

@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -66,10 +67,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb, privateState *stat
 
 		privateReceipts types.Receipts
 	)
+	//fmt.Println("-------------------------------hou")
 	// Mutate the the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
+	//fmt.Println("----------------2---------------hou")
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
@@ -77,6 +80,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb, privateState *stat
 
 		receipt, privateReceipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, privateState, header, tx, totalUsedGas, cfg)
 		if err != nil {
+			fmt.Println("ApplyTransaction err------------hou")
 			return nil, nil, nil, nil, err
 		}
 		receipts = append(receipts, receipt)
@@ -91,7 +95,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb, privateState *stat
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
-
+	//fmt.Println("Finalize err ?????????????????????????")
 	return receipts, privateReceipts, allLogs, totalUsedGas, nil
 }
 
@@ -103,13 +107,15 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	if !config.IsQuorum || !tx.IsPrivate() {
 		privateState = statedb
 	}
+	privateState = statedb//???????????????????????????添加   hou
 
-	if config.IsQuorum && tx.GasPrice() != nil && tx.GasPrice().Cmp(common.Big0) > 0 {
-		return nil, nil, nil, ErrInvalidGasPrice
-	}
+	//if config.IsQuorum && tx.GasPrice() != nil && tx.GasPrice().Cmp(common.Big0) > 0 {
+	//	return nil, nil, nil, ErrInvalidGasPrice
+	//}
 
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
+		fmt.Println("AsMessage err ---------------hou")
 		return nil, nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
@@ -120,6 +126,7 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	// Apply the transaction to the current state (included in the env)
 	_, gas, failed, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
+		fmt.Println("ApplyMessage err ---------------hou")
 		return nil, nil, nil, err
 	}
 
@@ -148,6 +155,7 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 
 	var privateReceipt *types.Receipt
 	if config.IsQuorum && tx.IsPrivate() {
+		fmt.Println("private Tx do something")
 		var privateRoot []byte
 		if config.IsByzantium(header.Number) {
 			privateState.Finalise(true)

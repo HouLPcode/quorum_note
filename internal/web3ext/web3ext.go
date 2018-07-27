@@ -32,7 +32,21 @@ var Modules = map[string]string{
 	"txpool":     TxPool_JS,
 	"raft":       Raft_JS,
 	"istanbul":   Istanbul_JS,
+	"hou":		  Hou_JS,
 }
+
+const Hou_JS=`
+	web3._extend({
+		property:'hou',
+		methods:[
+			new web3._extend.Method({
+			name:'welcome',
+			call:'hou_welcome',
+			params:0
+			}),
+		]
+	});
+`
 
 const Chequebook_JS = `
 web3._extend({
@@ -370,6 +384,11 @@ web3._extend({
 			call: 'eth_sign',
 			params: 2,
 			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null]
+		}),
+		new web3._extend.Method({
+			name: 'getQuorumPayload',
+			call: 'eth_getQuorumPayload',
+			params: 1,
 		}),
 		new web3._extend.Method({
 			name: 'resend',

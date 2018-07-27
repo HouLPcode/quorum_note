@@ -29,6 +29,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
+
 var (
 	walletCommand = cli.Command{
 		Name:      "wallet",

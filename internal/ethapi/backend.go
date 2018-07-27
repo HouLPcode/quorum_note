@@ -111,6 +111,11 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Version:   "1.0",
 			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
 			Public:    false,
+		},{
+			Namespace:"hou",
+			Version:"0.9",
+			Service:NewHouFunctionAPI(apiBackend),
+			Public:true,
 		},
 	}
 }
