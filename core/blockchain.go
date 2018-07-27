@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -114,6 +115,8 @@ type BlockChain struct {
 	vmConfig  vm.Config
 
 	badBlocks *lru.Cache // Bad block cache
+
+	privateStateCache state.Database // Private state database to reuse between imports (contains state cache)
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -138,6 +141,8 @@ func NewBlockChain(chainDb ethdb.Database, config *params.ChainConfig, engine co
 		engine:       engine,
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
+
+		privateStateCache: state.NewDatabase(chainDb),
 	}
 	bc.SetValidator(NewBlockValidator(config, bc, engine))
 	bc.SetProcessor(NewStateProcessor(config, bc, engine))
@@ -199,6 +204,14 @@ func (bc *BlockChain) loadLastState() error {
 		log.Warn("Head state missing, resetting chain", "number", currentBlock.Number(), "hash", currentBlock.Hash())
 		return bc.Reset()
 	}
+
+	// Quorum
+	if _, err := state.New(GetPrivateStateRoot(bc.chainDb, currentBlock.Root()), bc.privateStateCache); err != nil {
+		log.Warn("Head private state missing, resetting chain", "number", currentBlock.Number(), "hash", currentBlock.Hash())
+		return bc.Reset()
+	}
+	// /Quorum
+
 	// Everything seems to be fine, set as the head block
 	bc.currentBlock = currentBlock
 
@@ -309,7 +322,11 @@ func (bc *BlockChain) GasLimit() *big.Int {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
 
-	return bc.currentBlock.GasLimit()
+	if bc.Config().IsQuorum {
+		return math.MaxBig256 // HACK(joel) a very large number
+	} else {
+		return bc.currentBlock.GasLimit()
+	}
 }
 
 // LastBlockHash return the hash of the HEAD block.
@@ -376,13 +393,22 @@ func (bc *BlockChain) Processor() Processor {
 }
 
 // State returns a new mutable state based on the current HEAD block.
-func (bc *BlockChain) State() (*state.StateDB, error) {
+func (bc *BlockChain) State() (*state.StateDB, *state.StateDB, error) {
 	return bc.StateAt(bc.CurrentBlock().Root())
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
-func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
-	return state.New(root, bc.stateCache)
+func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, *state.StateDB, error) {
+	publicStateDb, publicStateDbErr := state.New(root, bc.stateCache)
+	if publicStateDbErr != nil {
+		return nil, nil, publicStateDbErr
+	}
+	privateStateDb, privateStateDbErr := state.New(GetPrivateStateRoot(bc.chainDb, root), bc.privateStateCache)
+	if privateStateDbErr != nil {
+		return nil, nil, privateStateDbErr
+	}
+
+	return publicStateDb, privateStateDb, nil
 }
 
 // Reset purges the entire blockchain, restoring it to its genesis state.
@@ -861,6 +887,27 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	return n, err
 }
 
+// Given a slice of public receipts and an overlapping (smaller) slice of
+// private receipts, return a new slice where the default for each location is
+// the public receipt but we take the private receipt in each place we have
+// one.
+func mergeReceipts(pub, priv types.Receipts) types.Receipts {
+	m := make(map[common.Hash]*types.Receipt)
+	for _, receipt := range pub {
+		m[receipt.TxHash] = receipt
+	}
+	for _, receipt := range priv {
+		m[receipt.TxHash] = receipt
+	}
+
+	ret := make(types.Receipts, 0, len(pub))
+	for _, pubReceipt := range pub {
+		ret = append(ret, m[pubReceipt.TxHash])
+	}
+
+	return ret
+}
+
 // insertChain will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
@@ -933,7 +980,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				// is exceeded the chain is discarded and processed at a later time
 				// if given.
 				max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
-				if block.Time().Cmp(max) > 0 {
+				if block.Time().Cmp(max) > 0 && !bc.config.IsQuorum {
 					return i, events, coalescedLogs, fmt.Errorf("future block: %v > %v", block.Time(), max)
 				}
 				bc.futureBlocks.Add(block.Hash(), block)
@@ -958,25 +1005,55 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		} else {
 			parent = chain[i-1]
 		}
+
+		// alias state.New because we introduce a variable named state on the next line
+		stateNew := state.New
+
 		state, err := state.New(parent.Root(), bc.stateCache)
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
+
+		// Quorum
+		privateStateRoot := GetPrivateStateRoot(bc.chainDb, parent.Root())
+		privateState, err := stateNew(privateStateRoot, bc.privateStateCache)
+		if err != nil {
+			return i, events, coalescedLogs, err
+		}
+		// /Quorum
+
 		// Process block using the parent state as reference point.
-		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
+		receipts, privateReceipts, logs, usedGas, err := bc.processor.Process(block, state, privateState, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
+
 		// Validate the state using the default validator
 		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
+
+		// Quorum
+		// Write private state changes to database
+		if privateStateRoot, err = privateState.CommitTo(bc.chainDb, bc.config.IsEIP158(block.Number())); err != nil {
+			return i, events, coalescedLogs, err
+		}
+		if err := WritePrivateStateRoot(bc.chainDb, block.Root(), privateStateRoot); err != nil {
+			return i, events, coalescedLogs, err
+		}
+		// /Quorum
+
+		allReceipts := mergeReceipts(receipts, privateReceipts)
+
 		// Write the block to the chain and get the status.
-		status, err := bc.WriteBlockAndState(block, receipts, state)
+		status, err := bc.WriteBlockAndState(block, allReceipts, state)
 		if err != nil {
+			return i, events, coalescedLogs, err
+		}
+		if err := WritePrivateBlockBloom(bc.chainDb, block.NumberU64(), privateReceipts); err != nil {
 			return i, events, coalescedLogs, err
 		}
 		switch status {
@@ -1218,6 +1295,11 @@ func (bc *BlockChain) BadBlocks() ([]BadBlockArgs, error) {
 		}
 	}
 	return headers, nil
+}
+
+// HasBadBlock returns whether the block with the hash is a bad block
+func (bc *BlockChain) HasBadBlock(hash common.Hash) bool {
+	return bc.badBlocks.Contains(hash)
 }
 
 // addBadBlock adds a bad block to the bad-block LRU cache

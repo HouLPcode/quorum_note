@@ -102,6 +102,7 @@ var (
 		utils.DevModeFlag,
 		utils.TestnetFlag,
 		utils.RinkebyFlag,
+		utils.OttomanFlag,
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
 		utils.RPCCORSDomainFlag,
@@ -113,6 +114,14 @@ var (
 		utils.GpoPercentileFlag,
 		utils.ExtraDataFlag,
 		configFileFlag,
+		utils.EnableNodePermissionFlag,
+		utils.RaftModeFlag,
+		utils.RaftBlockTimeFlag,
+		utils.RaftJoinExistingFlag,
+		utils.RaftPortFlag,
+		utils.EmitCheckpointsFlag,
+		utils.IstanbulRequestTimeoutFlag,
+		utils.IstanbulBlockPeriodFlag,
 	}
 
 	rpcFlags = []cli.Flag{
@@ -215,6 +224,8 @@ func geth(ctx *cli.Context) error {
 // it unlocks any requested accounts, and starts the RPC/IPC interfaces and the
 // miner.
 func startNode(ctx *cli.Context, stack *node.Node) {
+	log.DoEmitCheckpoints = ctx.GlobalBool(utils.EmitCheckpointsFlag.Name)
+
 	// Start up the node itself
 	utils.StartNode(stack)
 

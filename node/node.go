@@ -143,8 +143,8 @@ func (n *Node) Start() error {
 
 	// Initialize the p2p server. This creates the node key and
 	// discovery databases.
+	n.config.P2P.PrivateKey = n.config.NodeKey()
 	n.serverConfig = n.config.P2P
-	n.serverConfig.PrivateKey = n.config.NodeKey()
 	n.serverConfig.Name = n.config.NodeName()
 	if n.serverConfig.StaticNodes == nil {
 		n.serverConfig.StaticNodes = n.config.StaticNodes()
@@ -155,6 +155,8 @@ func (n *Node) Start() error {
 	if n.serverConfig.NodeDatabase == "" {
 		n.serverConfig.NodeDatabase = n.config.NodeDB()
 	}
+	n.serverConfig.EnableNodePermission = n.config.EnableNodePermission
+	n.serverConfig.DataDir = n.config.DataDir
 	running := &p2p.Server{Config: n.serverConfig}
 	log.Info("Starting peer-to-peer node", "instance", n.serverConfig.Name)
 

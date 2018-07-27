@@ -84,7 +84,7 @@ func (b *BlockGen) AddTx(tx *types.Transaction) {
 		b.SetCoinbase(common.Address{})
 	}
 	b.statedb.Prepare(tx.Hash(), common.Hash{}, len(b.txs))
-	receipt, _, err := ApplyTransaction(b.config, nil, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, b.header.GasUsed, vm.Config{})
+	receipt, _, _, err := ApplyTransaction(b.config, nil, &b.header.Coinbase, b.gasPool, b.statedb, b.statedb, b.header, tx, b.header.GasUsed, vm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -235,7 +235,7 @@ func newCanonical(n int, full bool) (ethdb.Database, *BlockChain, error) {
 	db, _ := ethdb.NewMemDatabase()
 	genesis := gspec.MustCommit(db)
 
-	blockchain, _ := NewBlockChain(db, params.AllProtocolChanges, ethash.NewFaker(), vm.Config{})
+	blockchain, _ := NewBlockChain(db, params.AllEthashProtocolChanges, ethash.NewFaker(), vm.Config{})
 	// Create and inject the requested chain
 	if n == 0 {
 		return db, blockchain, nil

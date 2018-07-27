@@ -74,11 +74,15 @@ type Work struct {
 
 	Block *types.Block // the new block
 
-	header   *types.Header
-	txs      []*types.Transaction
-	receipts []*types.Receipt
+	header          *types.Header
+	txs             []*types.Transaction
+	receipts        []*types.Receipt
+	privateReceipts []*types.Receipt
 
 	createdAt time.Time
+
+	// Leave this publicState named state, add privateState which most code paths can just ignore
+	privateState *state.StateDB
 }
 
 type Result struct {
@@ -145,15 +149,18 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		agents:         make(map[Agent]struct{}),
 		unconfirmed:    newUnconfirmedBlocks(eth.BlockChain(), miningLogAtDepth),
 	}
-	// Subscribe TxPreEvent for tx pool
-	worker.txSub = eth.TxPool().SubscribeTxPreEvent(worker.txCh)
-	// Subscribe events for blockchain
-	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
-	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
-	go worker.update()
 
-	go worker.wait()
-	worker.commitNewWork()
+	if _, ok := engine.(consensus.Istanbul); ok || !config.IsQuorum {
+		// Subscribe TxPreEvent for tx pool
+		worker.txSub = eth.TxPool().SubscribeTxPreEvent(worker.txCh)
+		// Subscribe events for blockchain
+		worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
+		worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+		go worker.update()
+
+		go worker.wait()
+		worker.commitNewWork()
+	}
 
 	return worker
 }
@@ -170,7 +177,7 @@ func (self *worker) setExtra(extra []byte) {
 	self.extra = extra
 }
 
-func (self *worker) pending() (*types.Block, *state.StateDB) {
+func (self *worker) pending() (*types.Block, *state.StateDB, *state.StateDB) {
 	self.currentMu.Lock()
 	defer self.currentMu.Unlock()
 
@@ -180,9 +187,9 @@ func (self *worker) pending() (*types.Block, *state.StateDB) {
 			self.current.txs,
 			nil,
 			self.current.receipts,
-		), self.current.state.Copy()
+		), self.current.state.Copy(), self.current.privateState.Copy()
 	}
-	return self.current.Block, self.current.state.Copy()
+	return self.current.Block, self.current.state.Copy(), self.current.privateState.Copy()
 }
 
 func (self *worker) pendingBlock() *types.Block {
@@ -205,6 +212,9 @@ func (self *worker) start() {
 	defer self.mu.Unlock()
 
 	atomic.StoreInt32(&self.mining, 1)
+	if istanbul, ok := self.engine.(consensus.Istanbul); ok {
+		istanbul.Start(self.chain, self.chain.CurrentBlock, self.chain.HasBadBlock)
+	}
 
 	// spin up agents
 	for agent := range self.agents {
@@ -222,6 +232,11 @@ func (self *worker) stop() {
 			agent.Stop()
 		}
 	}
+
+	if istanbul, ok := self.engine.(consensus.Istanbul); ok {
+		istanbul.Stop()
+	}
+
 	atomic.StoreInt32(&self.mining, 0)
 	atomic.StoreInt32(&self.atWork, 0)
 }
@@ -250,6 +265,9 @@ func (self *worker) update() {
 		select {
 		// Handle ChainHeadEvent
 		case <-self.chainHeadCh:
+			if h, ok := self.engine.(consensus.Handler); ok {
+				h.NewChainHead()
+			}
 			self.commitNewWork()
 
 		// Handle ChainSideEvent
@@ -304,7 +322,13 @@ func (self *worker) wait() {
 			for _, log := range work.state.Logs() {
 				log.BlockHash = block.Hash()
 			}
-			stat, err := self.chain.WriteBlockAndState(block, work.receipts, work.state)
+
+			// write private transacions
+			privateStateRoot, _ := work.privateState.CommitTo(self.chainDb, self.config.IsEIP158(block.Number()))
+			core.WritePrivateStateRoot(self.chainDb, block.Root(), privateStateRoot)
+			allReceipts := append(work.receipts, work.privateReceipts...)
+
+			stat, err := self.chain.WriteBlockAndState(block, allReceipts, work.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -351,19 +375,20 @@ func (self *worker) push(work *Work) {
 
 // makeCurrent creates a new environment for the current cycle.
 func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error {
-	state, err := self.chain.StateAt(parent.Root())
+	publicState, privateState, err := self.chain.StateAt(parent.Root())
 	if err != nil {
 		return err
 	}
 	work := &Work{
-		config:    self.config,
-		signer:    types.NewEIP155Signer(self.config.ChainId),
-		state:     state,
-		ancestors: set.New(),
-		family:    set.New(),
-		uncles:    set.New(),
-		header:    header,
-		createdAt: time.Now(),
+		config:       self.config,
+		signer:       types.MakeSigner(self.config, header.Number),
+		state:        publicState,
+		ancestors:    set.New(),
+		family:       set.New(),
+		uncles:       set.New(),
+		header:       header,
+		createdAt:    time.Now(),
+		privateState: privateState,
 	}
 
 	// when 08 is processed ancestors contain 07 (quick block)
@@ -582,14 +607,21 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 
 func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, coinbase common.Address, gp *core.GasPool) (error, []*types.Log) {
 	snap := env.state.Snapshot()
+	privateSnap := env.privateState.Snapshot()
 
-	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, env.header.GasUsed, vm.Config{})
+	receipt, privateReceipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.privateState, env.header, tx, env.header.GasUsed, vm.Config{})
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
+		env.privateState.RevertToSnapshot(privateSnap)
 		return err, nil
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 
-	return nil, receipt.Logs
+	logs := receipt.Logs
+	if privateReceipt != nil {
+		logs = append(receipt.Logs, privateReceipt.Logs...)
+		env.privateReceipts = append(env.privateReceipts, privateReceipt)
+	}
+	return nil, logs
 }

@@ -40,6 +40,9 @@ type sigCache struct {
 
 // MakeSigner returns a Signer based on the given chain config and block number.
 func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
+	if config.IsQuorum {
+		return HomesteadSigner{}
+	}
 	var signer Signer
 	switch {
 	case config.IsEIP155(blockNumber):
@@ -133,7 +136,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
+	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true, false)
 }
 
 // WithSignature returns a new transaction with the given signature. This signature
@@ -180,7 +183,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
+	return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true, tx.IsPrivate())
 }
 
 type FrontierSigner struct{}
@@ -198,7 +201,11 @@ func (fs FrontierSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *
 	}
 	r = new(big.Int).SetBytes(sig[:32])
 	s = new(big.Int).SetBytes(sig[32:64])
-	v = new(big.Int).SetBytes([]byte{sig[64] + 27})
+	if tx.IsPrivate() {
+		v = new(big.Int).SetBytes([]byte{sig[64] + 37})
+	} else {
+		v = new(big.Int).SetBytes([]byte{sig[64] + 27})
+	}
 	return r, s, v, nil
 }
 
@@ -216,14 +223,20 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false, tx.IsPrivate())
 }
 
-func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
+func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool, isPrivate bool) (common.Address, error) {
 	if Vb.BitLen() > 8 {
 		return common.Address{}, ErrInvalidSig
 	}
-	V := byte(Vb.Uint64() - 27)
+	var offset uint64
+	if isPrivate {
+		offset = 37
+	} else {
+		offset = 27
+	}
+	V := byte(Vb.Uint64() - offset)
 	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
 		return common.Address{}, ErrInvalidSig
 	}
@@ -253,6 +266,7 @@ func deriveChainId(v *big.Int) *big.Int {
 		if v == 27 || v == 28 {
 			return new(big.Int)
 		}
+		// TODO(joel): this given v = 37 / 38 this constrains us to chain id 1
 		return new(big.Int).SetUint64((v - 35) / 2)
 	}
 	v = new(big.Int).Sub(v, big.NewInt(35))

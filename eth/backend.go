@@ -31,10 +31,13 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/consensus/istanbul"
+	istanbulBackend "github.com/ethereum/go-ethereum/consensus/istanbul/backend"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
@@ -93,6 +96,11 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 }
 
+// HACK(joel) this was added just to make the eth chain config visible to RegisterRaftService
+func (s *Ethereum) ChainConfig() *params.ChainConfig {
+	return s.chainConfig
+}
+
 func (s *Ethereum) AddLesServer(ls LesServer) {
 	s.lesServer = ls
 }
@@ -133,6 +141,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks),
 	}
 
+	// force to set the istanbul etherbase to node key address
+	if chainConfig.Istanbul != nil {
+		eth.etherbase = crypto.PubkeyToAddress(ctx.NodeKey().PublicKey)
+	}
+
 	log.Info("Initialising Ethereum protocol", "versions", ProtocolVersions, "network", config.NetworkId)
 
 	if !config.SkipBcVersionCheck {
@@ -161,11 +174,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, eth.chainConfig, eth.blockchain)
 
-	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb); err != nil {
+	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, config.RaftMode); err != nil {
 		return nil, err
 	}
 	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
-	eth.miner.SetExtra(makeExtraData(config.ExtraData))
+	eth.miner.SetExtra(makeExtraData(config.ExtraData, eth.chainConfig.IsQuorum))
 
 	eth.ApiBackend = &EthApiBackend{eth, nil}
 	gpoParams := config.GPO
@@ -177,7 +190,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	return eth, nil
 }
 
-func makeExtraData(extra []byte) []byte {
+func makeExtraData(extra []byte, isQuorum bool) []byte {
 	if len(extra) == 0 {
 		// create default extradata
 		extra, _ = rlp.EncodeToBytes([]interface{}{
@@ -187,8 +200,8 @@ func makeExtraData(extra []byte) []byte {
 			runtime.GOOS,
 		})
 	}
-	if uint64(len(extra)) > params.MaximumExtraDataSize {
-		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
+	if uint64(len(extra)) > params.GetMaximumExtraDataSize(isQuorum) {
+		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.GetMaximumExtraDataSize(isQuorum))
 		extra = nil
 	}
 	return extra
@@ -212,6 +225,15 @@ func CreateConsensusEngine(ctx *node.ServiceContext, config *Config, chainConfig
 	if chainConfig.Clique != nil {
 		return clique.New(chainConfig.Clique, db)
 	}
+	// If Istanbul is requested, set it up
+	if chainConfig.Istanbul != nil {
+		if chainConfig.Istanbul.Epoch != 0 {
+			config.Istanbul.Epoch = chainConfig.Istanbul.Epoch
+		}
+		config.Istanbul.ProposerPolicy = istanbul.ProposerPolicy(chainConfig.Istanbul.ProposerPolicy)
+		return istanbulBackend.New(&config.Istanbul, ctx.NodeKey(), db)
+	}
+
 	// Otherwise assume proof-of-work
 	switch {
 	case config.PowFake:
@@ -311,6 +333,10 @@ func (s *Ethereum) Etherbase() (eb common.Address, err error) {
 // set in js console via admin interface or wrapper from cli flags
 func (self *Ethereum) SetEtherbase(etherbase common.Address) {
 	self.lock.Lock()
+	if _, ok := self.engine.(consensus.Istanbul); ok {
+		log.Error("Cannot set etherbase in Istanbul consensus")
+		return
+	}
 	self.etherbase = etherbase
 	self.lock.Unlock()
 

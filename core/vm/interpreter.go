@@ -159,6 +159,10 @@ func (in *Interpreter) Run(snapshot int, contract *Contract, input []byte) (ret 
 		// Get the memory location of pc
 		op = contract.GetOp(pc)
 
+		if in.evm.quorumReadOnly && op.isMutating() {
+			return nil, fmt.Errorf("VM in read-only mode. Mutating opcode prohibited")
+		}
+
 		if in.cfg.Debug {
 			logged = false
 			pcCopy = uint64(pc)

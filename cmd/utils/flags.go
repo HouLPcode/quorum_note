@@ -126,7 +126,7 @@ var (
 	}
 	NetworkIdFlag = cli.Uint64Flag{
 		Name:  "networkid",
-		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby)",
+		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby, 5=Ottoman)",
 		Value: eth.DefaultConfig.NetworkId,
 	}
 	TestnetFlag = cli.BoolFlag{
@@ -136,6 +136,10 @@ var (
 	RinkebyFlag = cli.BoolFlag{
 		Name:  "rinkeby",
 		Usage: "Rinkeby network: pre-configured proof-of-authority test network",
+	}
+	OttomanFlag = cli.BoolFlag{
+		Name:  "ottoman",
+		Usage: "Ottoman network: pre-configured istanbul bft test network",
 	}
 	DevModeFlag = cli.BoolFlag{
 		Name:  "dev",
@@ -487,6 +491,49 @@ var (
 		Usage: "Minimum POW accepted",
 		Value: whisper.DefaultMinimumPoW,
 	}
+
+	// Raft flags
+	RaftModeFlag = cli.BoolFlag{
+		Name:  "raft",
+		Usage: "If enabled, uses Raft instead of Quorum Chain for consensus",
+	}
+	RaftBlockTimeFlag = cli.IntFlag{
+		Name:  "raftblocktime",
+		Usage: "Amount of time between raft block creations in milliseconds",
+		Value: 50,
+	}
+	RaftJoinExistingFlag = cli.IntFlag{
+		Name:  "raftjoinexisting",
+		Usage: "The raft ID to assume when joining an pre-existing cluster",
+		Value: 0,
+	}
+	EmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "emitcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
+	RaftPortFlag = cli.IntFlag{
+		Name:  "raftport",
+		Usage: "The port to bind for the raft transport",
+		Value: 50400,
+	}
+
+	// Quorum
+	EnableNodePermissionFlag = cli.BoolFlag{
+		Name:  "permissioned",
+		Usage: "If enabled, the node will allow only a defined list of nodes to connect",
+	}
+
+	// Istanbul settings
+	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
+		Name:  "istanbul.requesttimeout",
+		Usage: "Timeout for each Istanbul round in milliseconds",
+		Value: eth.DefaultConfig.Istanbul.RequestTimeout,
+	}
+	IstanbulBlockPeriodFlag = cli.Uint64Flag{
+		Name:  "istanbul.blockperiod",
+		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
+		Value: eth.DefaultConfig.Istanbul.BlockPeriod,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -499,6 +546,9 @@ func MakeDataDir(ctx *cli.Context) string {
 		}
 		if ctx.GlobalBool(RinkebyFlag.Name) {
 			return filepath.Join(path, "rinkeby")
+		}
+		if ctx.GlobalBool(OttomanFlag.Name) {
+			return filepath.Join(path, "ottoman")
 		}
 		return path
 	}
@@ -554,6 +604,8 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 		urls = params.TestnetBootnodes
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		urls = params.RinkebyBootnodes
+	case ctx.GlobalBool(OttomanFlag.Name):
+		urls = params.OttomanBootnodes
 	}
 
 	cfg.BootstrapNodes = make([]*discover.Node, 0, len(urls))
@@ -814,6 +866,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	setWS(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
 
+	cfg.EnableNodePermission = ctx.GlobalBool(EnableNodePermissionFlag.Name)
+
 	switch {
 	case ctx.GlobalIsSet(DataDirFlag.Name):
 		cfg.DataDir = ctx.GlobalString(DataDirFlag.Name)
@@ -823,6 +877,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "testnet")
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "rinkeby")
+	case ctx.GlobalBool(OttomanFlag.Name):
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "ottoman")
 	}
 
 	if ctx.GlobalIsSet(KeyStoreDirFlag.Name) {
@@ -899,6 +955,15 @@ func setEthash(ctx *cli.Context, cfg *eth.Config) {
 	}
 }
 
+func setIstanbul(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(IstanbulRequestTimeoutFlag.Name) {
+		cfg.Istanbul.RequestTimeout = ctx.GlobalUint64(IstanbulRequestTimeoutFlag.Name)
+	}
+	if ctx.GlobalIsSet(IstanbulBlockPeriodFlag.Name) {
+		cfg.Istanbul.BlockPeriod = ctx.GlobalUint64(IstanbulBlockPeriodFlag.Name)
+	}
+}
+
 func checkExclusive(ctx *cli.Context, flags ...cli.Flag) {
 	set := make([]string, 0, 1)
 	for _, flag := range flags {
@@ -924,7 +989,7 @@ func SetShhConfig(ctx *cli.Context, stack *node.Node, cfg *whisper.Config) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	// Avoid conflicting network flags
-	checkExclusive(ctx, DevModeFlag, TestnetFlag, RinkebyFlag)
+	checkExclusive(ctx, DevModeFlag, TestnetFlag, RinkebyFlag, OttomanFlag)
 	checkExclusive(ctx, FastSyncFlag, LightModeFlag, SyncModeFlag)
 
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
@@ -932,6 +997,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setGPO(ctx, &cfg.GPO)
 	setTxPool(ctx, &cfg.TxPool)
 	setEthash(ctx, cfg)
+	setIstanbul(ctx, cfg)
 
 	switch {
 	case ctx.GlobalIsSet(SyncModeFlag.Name):
@@ -985,6 +1051,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 			cfg.NetworkId = 4
 		}
 		cfg.Genesis = core.DefaultRinkebyGenesisBlock()
+	case ctx.GlobalBool(OttomanFlag.Name):
+		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 5
+		}
+		cfg.Genesis = core.DefaultOttomanGenesisBlock()
 	case ctx.GlobalBool(DevModeFlag.Name):
 		cfg.Genesis = core.DevGenesisBlock()
 		if !ctx.GlobalIsSet(GasPriceFlag.Name) {
@@ -1000,7 +1071,8 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
-func RegisterEthService(stack *node.Node, cfg *eth.Config) {
+func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum {
+	nodeChan := make(chan *eth.Ethereum, 1)
 	var err error
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1013,12 +1085,15 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				ls, _ := les.NewLesServer(fullNode, cfg)
 				fullNode.AddLesServer(ls)
 			}
+			nodeChan <- fullNode
 			return fullNode, err
 		})
 	}
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+
+	return nodeChan
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.
@@ -1077,6 +1152,8 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 		genesis = core.DefaultTestnetGenesisBlock()
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		genesis = core.DefaultRinkebyGenesisBlock()
+	case ctx.GlobalBool(OttomanFlag.Name):
+		genesis = core.DefaultOttomanGenesisBlock()
 	case ctx.GlobalBool(DevModeFlag.Name):
 		genesis = core.DevGenesisBlock()
 	}

@@ -60,8 +60,8 @@ func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block
 	return bc.CurrentBlock()
 }
 
-func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
-	return bc.statedb, nil
+func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, *state.StateDB, error) {
+	return bc.statedb, bc.statedb, nil
 }
 
 func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription {
@@ -130,7 +130,7 @@ type testChain struct {
 // testChain.State() is used multiple times to reset the pending state.
 // when simulate is true it will create a state that indicates
 // that tx0 and tx1 are included in the chain.
-func (c *testChain) State() (*state.StateDB, error) {
+func (c *testChain) State() (*state.StateDB, *state.StateDB, error) {
 	// delay "state change" by one. The tx pool fetches the
 	// state multiple times and by delaying it a bit we simulate
 	// a state change between those fetches.
@@ -143,7 +143,7 @@ func (c *testChain) State() (*state.StateDB, error) {
 		c.statedb.SetBalance(c.address, new(big.Int).SetUint64(params.Ether))
 		*c.trigger = false
 	}
-	return stdb, nil
+	return stdb, stdb, nil
 }
 
 // This test simulates a scenario where a new block is imported during a
@@ -206,7 +206,6 @@ func TestInvalidTransactions(t *testing.T) {
 
 	tx := transaction(0, big.NewInt(100), key)
 	from, _ := deriveSender(tx)
-
 	pool.currentState.AddBalance(from, big.NewInt(1))
 	if err := pool.AddRemote(tx); err != ErrInsufficientFunds {
 		t.Error("expected", ErrInsufficientFunds)

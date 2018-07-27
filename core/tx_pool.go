@@ -78,6 +78,8 @@ var (
 	// than some meaningful limit a user might use. This is not a consensus error
 	// making the transaction invalid, rather a DOS protection.
 	ErrOversizedData = errors.New("oversized data")
+
+	ErrInvalidGasPrice = errors.New("Gas price not 0")
 )
 
 var (
@@ -108,7 +110,7 @@ var (
 type blockChain interface {
 	CurrentBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
-	StateAt(root common.Hash) (*state.StateDB, error)
+	StateAt(root common.Hash) (*state.StateDB, *state.StateDB, error)
 
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
@@ -214,7 +216,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		config:      config,
 		chainconfig: chainconfig,
 		chain:       chain,
-		signer:      types.NewEIP155Signer(chainconfig.ChainId),
+		signer:      types.MakeSigner(chainconfig, new(big.Int)),
 		pending:     make(map[common.Address]*txList),
 		queue:       make(map[common.Address]*txList),
 		beats:       make(map[common.Address]time.Time),
@@ -392,7 +394,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	if newHead == nil {
 		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
 	}
-	statedb, err := pool.chain.StateAt(newHead.Root)
+	statedb, _, err := pool.chain.StateAt(newHead.Root)
 	if err != nil {
 		log.Error("Failed to reset txpool state", "err", err)
 		return
@@ -544,6 +546,11 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+	isQuorum := pool.chainconfig.IsQuorum
+
+	if isQuorum && tx.GasPrice().Cmp(common.Big0) != 0 {
+		return ErrInvalidGasPrice
+	}
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
 	if tx.Size() > 32*1024 {
 		return ErrOversizedData
@@ -564,7 +571,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
-	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
+	if !isQuorum && !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering
@@ -577,7 +584,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrInsufficientFunds
 	}
 	intrGas := IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
-	if tx.Gas().Cmp(intrGas) < 0 {
+	if !isQuorum && tx.Gas().Cmp(intrGas) < 0 {
 		return ErrIntrinsicGas
 	}
 	return nil
@@ -607,7 +614,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(len(pool.all)) >= pool.config.GlobalSlots+pool.config.GlobalQueue {
 		// If the new transaction is underpriced, don't accept it
-		if pool.priced.Underpriced(tx, pool.locals) {
+		if !pool.chainconfig.IsQuorum && pool.priced.Underpriced(tx, pool.locals) {
 			log.Trace("Discarding underpriced transaction", "hash", hash, "price", tx.GasPrice())
 			underpricedTxCounter.Inc(1)
 			return false, ErrUnderpriced
@@ -866,6 +873,12 @@ func (pool *TxPool) removeTx(hash common.Hash) {
 // future queue to the set of pending transactions. During this process, all
 // invalidated transactions (low nonce, low balance) are deleted.
 func (pool *TxPool) promoteExecutables(accounts []common.Address) {
+	isQuorum := pool.chainconfig.IsQuorum
+	// Init delayed since tx pool could have been started before any state sync
+	if isQuorum && pool.pendingState == nil {
+		pool.reset(nil, nil)
+	}
+
 	// Gather all the accounts potentially needing updates
 	if accounts == nil {
 		accounts = make([]common.Address, 0, len(pool.queue))
@@ -886,14 +899,16 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 			delete(pool.all, hash)
 			pool.priced.Removed()
 		}
-		// Drop all transactions that are too costly (low balance or out of gas)
-		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
-		for _, tx := range drops {
-			hash := tx.Hash()
-			log.Trace("Removed unpayable queued transaction", "hash", hash)
-			delete(pool.all, hash)
-			pool.priced.Removed()
-			queuedNofundsCounter.Inc(1)
+		if !isQuorum {
+			// Drop all transactions that are too costly (low balance or out of gas)
+			drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+			for _, tx := range drops {
+				hash := tx.Hash()
+				log.Trace("Removed unpayable queued transaction", "hash", hash)
+				delete(pool.all, hash)
+				pool.priced.Removed()
+				queuedNofundsCounter.Inc(1)
+			}
 		}
 		// Gather all executable transactions and promote them
 		for _, tx := range list.Ready(pool.pendingState.GetNonce(addr)) {

@@ -139,6 +139,10 @@ type Config struct {
 	// If EnableMsgEvents is set then the server will emit PeerEvents
 	// whenever a message is sent to or received from a peer
 	EnableMsgEvents bool
+
+	EnableNodePermission bool `toml:",omitempty"`
+
+	DataDir string `toml:",omitempty"`
 }
 
 // Server manages all peer connections.
@@ -715,6 +719,38 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *discover.Nod
 		c.close(err)
 		return
 	}
+
+	//START - QUORUM Permissioning
+	currentNode := srv.NodeInfo().ID
+	cnodeName := srv.NodeInfo().Name
+	log.Trace("Quorum permissioning",
+		"EnableNodePermission", srv.EnableNodePermission,
+		"DataDir", srv.DataDir,
+		"Current Node ID", currentNode,
+		"Node Name", cnodeName,
+		"Dialed Dest", dialDest,
+		"Connection ID", c.id,
+		"Connection String", c.id.String())
+
+	if srv.EnableNodePermission {
+		log.Trace("Node Permissioning is Enabled.")
+		node := c.id.String()
+		direction := "INCOMING"
+		if dialDest != nil {
+			node = dialDest.ID.String()
+			direction = "OUTGOING"
+			log.Trace("Node Permissioning", "Connection Direction", direction)
+		}
+
+		if !isNodePermissioned(node, currentNode, srv.DataDir, direction) {
+			return
+		}
+	} else {
+		log.Trace("Node Permissioning is Disabled.")
+	}
+
+	//END - QUORUM Permissioning
+
 	clog := log.New("id", c.id, "addr", c.fd.RemoteAddr(), "conn", c.flags)
 	// For dialed connections, check that the remote public key matches.
 	if dialDest != nil && c.id != dialDest.ID {

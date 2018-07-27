@@ -25,4 +25,6 @@ var (
 	ErrTraceLimitReached        = errors.New("the number of logs reached the specified limit")
 	ErrInsufficientBalance      = errors.New("insufficient balance for transfer")
 	ErrContractAddressCollision = errors.New("contract address collision")
+
+	ErrReadOnlyValueTransfer = errors.New("VM in read-only mode. Value transfer prohibited.")
 )
