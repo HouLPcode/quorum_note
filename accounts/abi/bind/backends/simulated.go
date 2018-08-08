@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // This nil assignment ensures compile time that SimulatedBackend implements bind.ContractBackend.
@@ -264,6 +265,7 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 // SendTransaction updates the pending block to include the given transaction.
 // It panics if the transaction is invalid.
 func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
+	log.Info("SimulatedBackend  SendTransaction")
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // ContractBackend implements bind.ContractBackend with direct calls to Ethereum
@@ -132,6 +133,7 @@ func (b *ContractBackend) EstimateGas(ctx context.Context, msg ethereum.CallMsg)
 // SendTransaction implements bind.ContractTransactor injects the transaction
 // into the pending pool for execution.
 func (b *ContractBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
+	log.Info("ContractBackend  SendTransaction")
 	raw, _ := rlp.EncodeToBytes(tx)
 	_, err := b.txapi.SendRawTransaction(ctx, raw)
 	return err

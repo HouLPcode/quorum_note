@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // EthereumClient provides access to the Ethereum APIs.
@@ -308,5 +309,6 @@ func (ec *EthereumClient) EstimateGas(ctx *Context, msg *CallMsg) (gas *BigInt, 
 // If the transaction was a contract creation use the TransactionReceipt method to get the
 // contract address after the transaction has been mined.
 func (ec *EthereumClient) SendTransaction(ctx *Context, tx *Transaction) error {
+	log.Info("EthereumClient  SendTransaction")
 	return ec.client.SendTransaction(ctx.context, tx.tx)
 }
