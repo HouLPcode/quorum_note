@@ -217,6 +217,9 @@ func throttle(rate time.Duration, f func()) func() {
 //   1. A block is guaranteed to be minted within `blockTime` of being
 //      requested.
 //   2. We never mint a block more frequently than `blockTime`.
+//此函数死循环，阻塞直到应创建一个块 （通过requestMinting（））。 出块时间由`minter.blockTime`控制：
+//   1.保证在块的“blockTime”内铸造一个块请求。
+//   2. 我们从来不会比`blockTime`更频繁地制作一个块。
 func (minter *minter) mintingLoop() {
 	throttledMintNewBlock := throttle(minter.blockTime, func() {
 		if atomic.LoadInt32(&minter.minting) == 1 {

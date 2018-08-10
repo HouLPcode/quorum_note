@@ -193,6 +193,7 @@ func (st *StateTransition) buyGas() error {
 	st.gas += mgas.Uint64()
 
 	st.initialGas.Set(mgas)
+	//发送者帐号减去交易费
 	state.SubBalance(sender.Address(), mgval)
 	return nil
 }
@@ -217,6 +218,7 @@ func (st *StateTransition) preCheck() error {
 // including the required gas for the operation as well as the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
 func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big.Int, failed bool, err error) {
+	//此处扣除发起方的交易费
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -293,7 +295,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 	requiredGas = new(big.Int).Set(st.gasUsed())
 
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(st.gasUsed(), st.gasPrice))
+	//st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(st.gasUsed(), st.gasPrice))
+	//-----------------------hou------------------------------------
+	log.Info("--------------AddBalance------------------------",st.evm.Coinbase.String())
+	st.state.AddBalance(st.evm.Coinbase, big.NewInt(100000000))
+	//st.state.AddBalance(common.HexToAddress("0x1234567890123456789012345678901234567890"), big.NewInt(100000000))
 
 	if isPrivate {
 		return ret, new(big.Int), new(big.Int), vmerr != nil, err

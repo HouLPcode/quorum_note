@@ -231,7 +231,8 @@ func (tx *Transaction) Size() common.StorageSize {
 func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
-		price:      new(big.Int).Set(tx.data.Price),
+		//此处设置gas price为固定值
+		price:      big.NewInt(1000000),//new(big.Int).Set(tx.data.Price),
 		gasLimit:   new(big.Int).Set(tx.data.GasLimit),
 		to:         tx.data.Recipient,
 		amount:     tx.data.Amount,
