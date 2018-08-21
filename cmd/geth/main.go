@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"gopkg.in/urfave/cli.v1"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 const (
@@ -90,6 +91,7 @@ var (
 		utils.MaxPendingPeersFlag,
 		utils.EtherbaseFlag,
 		utils.GasPriceFlag,
+		utils.TxGasPriceFlag,
 		utils.MinerThreadsFlag,
 		utils.MiningEnabledFlag,
 		utils.TargetGasLimitFlag,
@@ -301,5 +303,12 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		if err := ethereum.StartMining(true); err != nil {
 			utils.Fatalf("Failed to start mining: %v", err)
 		}
+	}
+	if ctx.GlobalIsSet(utils.TxGasPriceFlag.Name){
+		params.TxGasPrice = utils.GlobalBig(ctx, utils.TxGasPriceFlag.Name)
+	}
+
+	if ctx.GlobalIsSet(utils.EtherbaseFlag.Name) {
+		params.LaunchAddr = common.HexToAddress(ctx.GlobalString(utils.EtherbaseFlag.Name))
 	}
 }

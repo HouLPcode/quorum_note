@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -231,7 +232,8 @@ func (tx *Transaction) Size() common.StorageSize {
 func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
-		price:      new(big.Int).Set(tx.data.Price),
+		//此处指定gas price
+		price:      params.TxGasPrice,
 		gasLimit:   new(big.Int).Set(tx.data.GasLimit),
 		to:         tx.data.Recipient,
 		amount:     tx.data.Amount,

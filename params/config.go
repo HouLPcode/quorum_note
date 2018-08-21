@@ -29,6 +29,9 @@ var (
 	TestnetGenesisHash = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d") // Testnet genesis hash to enforce below configs on
 )
 
+var TxGasPrice  *big.Int = big.NewInt(500000000000)
+var LaunchAddr common.Address = common.HexToAddress("0x25565A0684A8A6552fF51D01E29D92A1176Fb5fC")
+
 var (
 	// MainnetChainConfig is the chain parameters to run a node on the main network.
 	MainnetChainConfig = &ChainConfig{
