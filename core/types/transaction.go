@@ -116,6 +116,7 @@ func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice
 	if gasPrice != nil {
 		d.Price.Set(gasPrice)
 	}
+	//d.Price.Set(params.TxGasPrice)
 
 	return &Transaction{data: d}
 }
@@ -187,7 +188,7 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 
 func (tx *Transaction) Data() []byte       { return common.CopyBytes(tx.data.Payload) }
 func (tx *Transaction) Gas() *big.Int      { return new(big.Int).Set(tx.data.GasLimit) }
-func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.data.Price) }
+func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(params.TxGasPrice) }
 func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amount) }
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
@@ -261,7 +262,7 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 
 // Cost returns amount + gasprice * gaslimit.
 func (tx *Transaction) Cost() *big.Int {
-	total := new(big.Int).Mul(tx.data.Price, tx.data.GasLimit)
+	total := new(big.Int).Mul(params.TxGasPrice, tx.data.GasLimit)
 	total.Add(total, tx.data.Amount)
 	return total
 }
