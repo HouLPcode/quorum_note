@@ -47,6 +47,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"net/http"
 	"sync"
+	"github.com/ethereum/go-ethereum/eth"
 )
 
 const (
@@ -1182,6 +1183,60 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 		return common.Hash{}, err
 	}
 	//TODO 交易参数检查
+	hash := tx.Hash()
+
+	if s.b.GetPoolTransaction(hash) != nil {
+		log.Trace("Discarding already known transaction", "hash", hash)
+		return common.Hash{}, fmt.Errorf("known transaction: %x", hash)
+	}
+	// If the transaction fails basic validation, discard it
+	meth := s.b.(*eth.EthApiBackend)
+	meth.txPool
+	if err := meth.pool.validateTx(tx, local); err != nil {
+		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
+		invalidTxCounter.Inc(1)
+		return false, err
+	}
+	///////////////
+
+	if isQuorum && tx.GasPrice().Cmp(common.Big0) != 0 {
+		return common.Hash{},core.ErrInvalidGasPrice
+	}
+	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
+	if tx.Size() > 32*1024 {
+		return common.Hash{},core.ErrOversizedData
+	}
+	// Transactions can't be negative. This may never happen using RLP decoded
+	// transactions but may occur if you create a transaction using the RPC.
+	if tx.Value().Sign() < 0 {
+		return common.Hash{},core.ErrNegativeValue
+	}
+
+	// Make sure the transaction is signed properly
+	from, err := types.Sender(pool.signer, tx)
+	if err != nil {
+		return common.Hash{},core.ErrInvalidSender
+	}
+	// Drop non-local transactions under our own minimal accepted gas price
+	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
+	if !isQuorum && !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
+		return ErrUnderpriced
+	}
+	// Ensure the transaction adheres to nonce ordering
+	if pool.currentState.GetNonce(from) > tx.Nonce() {
+		return ErrNonceTooLow
+	}
+	// Transactor should have enough funds to cover the costs
+	// cost == V + GP * GL
+	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+		return ErrInsufficientFunds
+	}
+	intrGas := IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
+	if !isQuorum && tx.Gas().Cmp(intrGas) < 0 {
+		return ErrIntrinsicGas
+	}
+	return nil
+	//////////////////
 	mparam.Store(tx.Hash(),&paramTx{ctx, s.b, signed, isPrivate})
 	//submitTransaction(ctx, s.b, signed, isPrivate)
 	return tx.Hash(), nil
