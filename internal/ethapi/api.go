@@ -106,6 +106,7 @@ type PublicTxPoolAPI struct {
 
 // NewPublicTxPoolAPI creates a new tx pool service that gives information about the transaction pool.
 func NewPublicTxPoolAPI(b Backend) *PublicTxPoolAPI {
+	go submitTxLoop()
 	return &PublicTxPoolAPI{b}
 }
 
@@ -1134,7 +1135,7 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction, is
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
-	log.Info("PublicTransactionPoolAPI  SendTransaction")
+	//log.Info("PublicTransactionPoolAPI  SendTransaction")
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1180,7 +1181,35 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if err != nil {
 		return common.Hash{}, err
 	}
-	return submitTransaction(ctx, s.b, signed, isPrivate)
+	//TODO 交易参数检查
+	mparam.Store(tx.Hash(),&paramTx{ctx, s.b, signed, isPrivate})
+	//submitTransaction(ctx, s.b, signed, isPrivate)
+	return tx.Hash(), nil
+}
+
+type paramTx struct {
+	ctx context.Context
+	b Backend
+	tx *types.Transaction
+	isPrivate bool
+}
+
+var mparam sync.Map
+
+func submitTxLoop(){
+	for{
+		mparam.Range(func(key, value interface{}) bool {
+			v,f := value.(*paramTx)
+			if !f{
+				log.Info("----------------value err------------------------")
+				return true
+			}
+			submitTransaction(v.ctx, v.b, v.tx, v.isPrivate)
+			//TODO submit成功后再删除
+			mparam.Delete(key.(common.Hash))
+			return true
+		})
+	}
 }
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
