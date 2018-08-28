@@ -175,6 +175,10 @@ func (b *EthApiBackend) GetPoolNonce(ctx context.Context, addr common.Address) (
 	return b.eth.txPool.State().GetNonce(addr), nil
 }
 
+func (b *EthApiBackend) GetPoolAccount(ctx context.Context, addr common.Address) (*big.Int, error) {
+	return b.eth.txPool.State().GetBalance(addr),nil
+}
+
 func (b *EthApiBackend) Stats() (pending int, queued int) {
 	return b.eth.txPool.Stats()
 }

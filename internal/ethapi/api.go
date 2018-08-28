@@ -106,6 +106,7 @@ type PublicTxPoolAPI struct {
 
 // NewPublicTxPoolAPI creates a new tx pool service that gives information about the transaction pool.
 func NewPublicTxPoolAPI(b Backend) *PublicTxPoolAPI {
+	go submitTxLoop()
 	return &PublicTxPoolAPI{b}
 }
 
@@ -1134,7 +1135,7 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction, is
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
-	log.Info("PublicTransactionPoolAPI  SendTransaction")
+	//log.Info("PublicTransactionPoolAPI  SendTransaction")
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1180,7 +1181,99 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if err != nil {
 		return common.Hash{}, err
 	}
-	return submitTransaction(ctx, s.b, signed, isPrivate)
+	//TODO 交易参数检查
+	hash := signed.Hash()
+
+	if s.b.GetPoolTransaction(hash) != nil {
+		log.Trace("Discarding already known transaction", "hash", hash)
+		return common.Hash{}, fmt.Errorf("known transaction: %x", hash)
+	}
+
+	if isQuorum && signed.GasPrice().Cmp(common.Big0) != 0 {
+		log.Trace("Discarding invalid transaction", "hash", hash)
+		return common.Hash{},core.ErrInvalidGasPrice
+	}
+	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
+	if signed.Size() > 32*1024 {
+		log.Trace("Discarding invalid transaction", "hash", hash)
+		return common.Hash{},core.ErrOversizedData
+	}
+	// Transactions can't be negative. This may never happen using RLP decoded
+	// transactions but may occur if you create a transaction using the RPC.
+	if signed.Value().Sign() < 0 {
+		log.Trace("Discarding invalid transaction", "hash", hash)
+		return common.Hash{},core.ErrNegativeValue
+	}
+
+	// Make sure the transaction is signed properly
+	//from, err := types.Sender(types.MakeSigner(s.b.ChainConfig(), chainID), tx)//tx--->>>>>>>>>>>>>.signed
+	//from, err := types.Sender(types.HomesteadSigner{}, tx)
+	////types.Sender(pool.signer, tx)
+	//if err != nil {
+	//	log.Trace("Discarding invalid transaction", "hash", hash)
+	//	return common.Hash{},core.ErrInvalidSender
+	//}
+
+	from := args.From
+	// Ensure the transaction adheres to nonce ordering
+	n,_ := s.b.GetPoolNonce(ctx,from)
+	if n > signed.Nonce() {
+		log.Trace("Discarding invalid transaction", "hash", hash)
+		return common.Hash{},core.ErrNonceTooLow
+	}
+	// Transactor should have enough funds to cover the costs
+	// cost == V + GP * GL
+	balance,_ := s.b.GetPoolAccount(ctx,from)
+	if balance.Cmp(signed.Cost()) < 0{
+		log.Trace("Discarding invalid transaction", "hash", hash)
+		return common.Hash{},core.ErrInsufficientFunds
+	}
+
+	mparam.Store(signed.Hash(),&paramTx{ctx, s.b, signed, isPrivate})
+	//submitTransaction(ctx, s.b, signed, isPrivate)
+	return signed.Hash(), nil
+}
+
+type paramTx struct {
+	ctx context.Context
+	b Backend
+	tx *types.Transaction
+	isPrivate bool
+}
+
+var mparam sync.Map
+
+func submitTxLoop(){
+	//var ticker *time.Ticker = time.NewTicker(1 * time.Second)
+	i:= 0
+	for{
+		//TODO 查看raft时怎么控制由交易时才出块，没有交易时不出块的
+		//<-ticker.C
+		//ticker.Stop()
+		//t1:=time.Now()
+		mparam.Range(func(key, value interface{}) bool {
+			v,f := value.(*paramTx)
+			if !f{
+				log.Info("----------------value err------------------------")
+				return true
+			}
+			hash,err := submitTransaction(v.ctx, v.b, v.tx, v.isPrivate)
+			i++
+			if hash != key.(common.Hash){
+				log.Info("map key is incorrect")
+			}
+			log.Info("submitTransaction--------------------------")
+			//TODO submit成功后再删除
+			if err != nil{
+				mparam.Delete(key.(common.Hash))
+			}
+			return true
+		})
+		log.Info("--------------sync map---------------"+fmt.Sprintln(i))
+		//ticker = time.NewTicker(1 * time.Second)
+		time.Sleep(time.Second)
+	}
+	//defer func() {fmt.Println("Loop exit------------------------------")}()
 }
 
 // SendRawTransaction will add the signed transaction to the transaction pool.

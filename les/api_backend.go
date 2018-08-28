@@ -118,6 +118,10 @@ func (b *LesApiBackend) GetPoolNonce(ctx context.Context, addr common.Address) (
 	return b.eth.txPool.GetNonce(ctx, addr)
 }
 
+func (b *LesApiBackend) GetPoolAccount(ctx context.Context, addr common.Address) (*big.Int, error) {
+	return nil,nil
+}
+
 func (b *LesApiBackend) Stats() (pending int, queued int) {
 	return b.eth.txPool.Stats(), 0
 }
