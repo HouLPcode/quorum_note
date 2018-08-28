@@ -1187,12 +1187,16 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 }
 
 func submitLoop(){
-	for {
-		select {
-		case v := <-subParmsC:
-			go submitTransaction(v.ctx,v.b,v.tx,v.isPrivate)
-			//fmt.Println(v)
-		}
+	//for {
+	//	select {
+	//	case v := <-subParmsC:
+	//		go submitTransaction(v.ctx,v.b,v.tx,v.isPrivate)
+	//		//fmt.Println(v)
+	//	}
+	//}
+	for v := range subParmsC{
+		//TODO 此处需要开启新的线程吗？？？
+		 submitTransaction(v.ctx,v.b,v.tx,v.isPrivate)
 	}
 	defer func() {log.Info("---------------------exit submitLoop---------------------------")}()
 }
@@ -1204,7 +1208,7 @@ type subParms struct {
 	isPrivate bool
 }
 
-var subParmsC = make(chan *subParms,2000)
+var subParmsC = make(chan *subParms,5000)
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.
