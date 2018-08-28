@@ -62,6 +62,7 @@ type PublicEthereumAPI struct {
 
 // NewPublicEthereumAPI creates a new Ethereum protocol API.
 func NewPublicEthereumAPI(b Backend) *PublicEthereumAPI {
+	go submitLoop()
 	return &PublicEthereumAPI{b}
 }
 
@@ -343,6 +344,7 @@ func (s *PrivateAccountAPI) LockAccount(addr common.Address) bool {
 // tries to sign it with the key associated with args.To. If the given passwd isn't
 // able to decrypt the key it fails.
 func (s *PrivateAccountAPI) SendTransaction(ctx context.Context, args SendTxArgs, passwd string) (common.Hash, error) {
+	log.Info("PrivateAccountAPI  SendTransaction")
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1133,6 +1135,7 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction, is
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
+	//log.Info("PublicTransactionPoolAPI  SendTransaction")
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1178,8 +1181,30 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if err != nil {
 		return common.Hash{}, err
 	}
-	return submitTransaction(ctx, s.b, signed, isPrivate)
+	subParmsC <- &subParms{ctx, s.b, signed, isPrivate}
+	return signed.Hash(), nil
+	// submitTransaction(ctx, s.b, signed, isPrivate)
 }
+
+func submitLoop(){
+	for {
+		select {
+		case v := <-subParmsC:
+			go submitTransaction(v.ctx,v.b,v.tx,v.isPrivate)
+			//fmt.Println(v)
+		}
+	}
+	defer func() {log.Info("---------------------exit submitLoop---------------------------")}()
+}
+
+type subParms struct {
+	ctx context.Context
+	b Backend
+	tx *types.Transaction
+	isPrivate bool
+}
+
+var subParmsC = make(chan *subParms,2000)
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.
