@@ -1109,13 +1109,16 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 
 // submitTransaction is a helper function that submits tx to txPool and logs a message.
 func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction, isPrivate bool) (common.Hash, error) {
+
 	if isPrivate {
 		tx.SetPrivate()
 	}
-
+	log.Info("beforSendTx------")
 	if err := b.SendTx(ctx, tx); err != nil {
+		log.Info("sendTxerr---------------------",err.Error())
 		return common.Hash{}, err
 	}
+	log.Info("afterSendTx-----")
 	if tx.To() == nil {
 		signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
 		from, err := types.Sender(signer, tx)
@@ -1151,7 +1154,13 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 		defer s.nonceLock.UnlockAddr(args.From)
 	}
 
+	//TODO data的处理
 	data := []byte(args.Data)
+	//log.Info("data is ---------------",fmt.Sprintf("0x%x",rand.Uint64()))
+	//if len([]byte(args.Data)) == 0{
+	//	args.Data = []byte(fmt.Sprintf("%x",rand.Uint64()))
+	//}
+	//log.Info("data is ---------------",fmt.Sprint(data),fmt.Sprint(len(data)))
 	isPrivate := args.PrivateFor != nil
 
 	if isPrivate {
@@ -1194,9 +1203,11 @@ func submitLoop(){
 	//		//fmt.Println(v)
 	//	}
 	//}
+
 	for v := range subParmsC{
 		//TODO 此处需要开启新的线程吗？？？
 		 submitTransaction(v.ctx,v.b,v.tx,v.isPrivate)
+		log.Info(fmt.Sprintln(v))
 	}
 	defer func() {log.Info("---------------------exit submitLoop---------------------------")}()
 }
@@ -1208,7 +1219,7 @@ type subParms struct {
 	isPrivate bool
 }
 
-var subParmsC = make(chan *subParms,5000)
+var subParmsC = make(chan *subParms,500)
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.

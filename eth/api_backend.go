@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // EthApiBackend implements ethapi.Backend for full nodes
@@ -152,6 +153,7 @@ func (b *EthApiBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
+	log.Info("callSendTx-----------")
 	return b.eth.txPool.AddLocal(signedTx)
 }
 

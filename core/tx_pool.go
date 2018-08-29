@@ -18,7 +18,6 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -576,7 +575,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
-		return ErrNonceTooLow
+		log.Info(ErrNonceTooLow.Error())
+		//return ErrNonceTooLow
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
@@ -600,17 +600,20 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction is already known, discard it
+	log.Info("txpooltxadd---------------------")//?????????????????????????????????????
 	hash := tx.Hash()
 	if pool.all[hash] != nil {
 		log.Trace("Discarding already known transaction", "hash", hash)
-		return false, fmt.Errorf("known transaction: %x", hash)
+		//return false, fmt.Errorf("known transaction: %x", hash)
 	}
+	log.Info("afterpoolall-------------")
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, local); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
 		invalidTxCounter.Inc(1)
 		return false, err
 	}
+	log.Info("afterpoolvalidatetx----------------------")
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(len(pool.all)) >= pool.config.GlobalSlots+pool.config.GlobalQueue {
 		// If the new transaction is underpriced, don't accept it
@@ -627,6 +630,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 			pool.removeTx(tx.Hash())
 		}
 	}
+	log.Info("afterlenpoolall-------------")
 	// If the transaction is replacing an already pending one, do directly
 	from, _ := types.Sender(pool.signer, tx) // already validated
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
@@ -649,8 +653,10 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 		return old != nil, nil
 	}
+	log.Info("beforepoolenqueuetx--------------")//err
 	// New transaction isn't replacing a pending one, push into queue
 	replace, err := pool.enqueueTx(hash, tx)
+	log.Info("afterpoolenqueuetx----------------")//err
 	if err != nil {
 		return false, err
 	}
@@ -743,6 +749,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 // the sender as a local one in the mean time, ensuring it goes around the local
 // pricing constraints.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
+	log.Info("calladdlocal------------------")
 	return pool.addTx(tx, !pool.config.NoLocals)
 }
 
@@ -769,12 +776,16 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) error {
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
+	log.Info("callinaddTx------------------")
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
 	// Try to inject the transaction and update any state
+	log.Info("pooladdbefore---------")
 	replace, err := pool.add(tx, local)
+	log.Info("pooladdafter-------------")//ok
 	if err != nil {
+		log.Info("pooladderr-------------",err.Error())//交易已知
 		return err
 	}
 	// If we added a new transaction, run promotion checks and return
@@ -782,6 +793,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		from, _ := types.Sender(pool.signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
 	}
+	log.Info("returnfromaddtx----------------")//err
 	return nil
 }
 

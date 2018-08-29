@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -93,8 +94,9 @@ func NewContractCreation(nonce uint64, amount, gasLimit, gasPrice *big.Int, data
 
 func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
 	if len(data) > 0 {
-		data = common.CopyBytes(data)
+		data = common.CopyBytes(data)//?????????????????????????
 	}
+	log.Info("newTransaction data is ",fmt.Sprintln(data),"------------")
 	d := txdata{
 		AccountNonce: nonce,
 		Recipient:    to,
