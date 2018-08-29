@@ -299,6 +299,11 @@ var (
 		Usage: "Minimal gas price to accept for mining a transactions",
 		Value: eth.DefaultConfig.GasPrice,
 	}
+	TxGasPriceFlag = BigFlag{
+		Name:  "txgasprice",
+		Usage: "the transaction gas price",
+		Value: big.NewInt(500000000000),
+	}
 	ExtraDataFlag = cli.StringFlag{
 		Name:  "extradata",
 		Usage: "Block extra data set by the miner (default = client version)",

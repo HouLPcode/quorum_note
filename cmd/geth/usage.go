@@ -182,6 +182,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.EtherbaseFlag,
 			utils.TargetGasLimitFlag,
 			utils.GasPriceFlag,
+			utils.TxGasPriceFlag,
 			utils.ExtraDataFlag,
 		},
 	},
