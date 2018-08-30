@@ -49,7 +49,7 @@ const (
 
 	// txChanSize is the size of channel listening to TxPreEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 4096
+	txChanSize = 409600
 )
 
 var (
@@ -766,7 +766,7 @@ func (pm *ProtocolManager) BroadcastTx(hash common.Hash, tx *types.Transaction) 
 	for _, peer := range peers {
 		peer.SendTransactions(types.Transactions{tx})
 	}
-	log.Trace("Broadcast transaction", "hash", hash, "recipients", len(peers))
+	log.Info("Broadcast transaction", "hash", hash, "recipients", len(peers))
 }
 
 // Mined broadcast loop
