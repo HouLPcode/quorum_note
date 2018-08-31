@@ -736,6 +736,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
+	// 此处关闭单独的线程？？？？？？？？？？？？？？？？？？？？？？？？？？？？
 	go pool.txFeed.Send(TxPreEvent{tx})
 }
 
