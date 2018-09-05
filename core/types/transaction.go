@@ -116,7 +116,6 @@ func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice
 	if gasPrice != nil {
 		d.Price.Set(gasPrice)
 	}
-	//d.Price.Set(params.TxGasPrice)
 
 	return &Transaction{data: d}
 }
