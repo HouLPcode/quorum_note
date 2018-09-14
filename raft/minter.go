@@ -194,7 +194,7 @@ func (minter *minter) eventLoop() {
 //返回no-arg func`f`的包装器，可以无限制地调用并立即返回：这将每个`rate`最多调用一次底层函数`f`。 如果在调用基础`f`之前多次调用此函数（根据此速率限制），`f`将仅被调用* 一次 *。
 // 这有一个小错误，你不能在第一次分配时立即调用。
 func throttle(rate time.Duration, f func()) func() {
-	//request := channels.NewRingChannel(1)
+	request := channels.NewRingChannel(1)
 
 	// every tick, block waiting for another request. then serve it immediately
 	go func() {
@@ -202,13 +202,13 @@ func throttle(rate time.Duration, f func()) func() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			//<-request.Out()
+			<-request.Out()
 			go f()
 		}
 	}()
-	time.Sleep(time.Second)
+
 	return func() {
-		//request.In() <- struct{}{}
+		request.In() <- struct{}{}
 	}
 }
 
@@ -222,24 +222,15 @@ func throttle(rate time.Duration, f func()) func() {
 //   1.保证在块的“blockTime”内铸造一个块请求。
 //   2.我们从来不会比`blockTime`更频繁地制作一个块。
 func (minter *minter) mintingLoop() {
-	//throttledMintNewBlock := throttle(minter.blockTime, func() {
-	//	if atomic.LoadInt32(&minter.minting) == 1 {
-	//		minter.mintNewBlock()
-	//	}
-	//})
-	//
-	//for range minter.shouldMine.Out() {
-	//	throttledMintNewBlock()
-	//}
-	ticker := time.NewTicker(minter.blockTime)
-	defer ticker.Stop()
-
-		for range ticker.C {
-			//<-request.Out()
-			go func() {
-				minter.mintNewBlock()
-			}()
+	throttledMintNewBlock := throttle(minter.blockTime, func() {
+		if atomic.LoadInt32(&minter.minting) == 1 {
+			minter.mintNewBlock()
 		}
+	})
+
+	for range minter.shouldMine.Out() {
+		throttledMintNewBlock()
+	}
 
 	time.Sleep(time.Second)
 }
