@@ -22,6 +22,7 @@ import (
 
 // stoppableListener sets TCP keep-alive timeouts on accepted
 // connections and waits on stopc message
+//接受的连接上设置TCP长链接超时，并等待stopc消息
 type stoppableListener struct {
 	*net.TCPListener
 	stopc <-chan struct{}

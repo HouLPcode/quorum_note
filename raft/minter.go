@@ -75,13 +75,14 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		chain:            eth.BlockChain(),
 		shouldMine:       channels.NewRingChannel(1),
 		blockTime:        blockTime,
-		speculativeChain: newSpeculativeChain(),
+		speculativeChain: newSpeculativeChain(),//预测链
 
 		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
 		txPreChan:               make(chan core.TxPreEvent, 4096),
 	}
 
+	//订阅ChainHeadEvent和TxPreEvent事件
 	minter.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(minter.chainHeadChan)
 	minter.txPreSub = eth.TxPool().SubscribeTxPreEvent(minter.txPreChan)
 
@@ -277,6 +278,7 @@ func (minter *minter) createWork() *work {
 }
 
 func (minter *minter) getTransactions() *types.TransactionsByPriceAndNonce {
+	//pending中所有的交易
 	allAddrTxes, err := minter.eth.TxPool().Pending()
 	if err != nil { // TODO: handle
 		panic(err)

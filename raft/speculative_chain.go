@@ -18,6 +18,14 @@ import (
 // Additionally:
 // * clear state when we stop minting
 // * set the parent when we're not minting (so it's always current)
+//投机链表示我们已经铸造的块，这些块尚未被链接接入，在链中相互构建。 它有三个基本操作：
+//*添加新块到结尾
+//*接受/删除最旧的块
+//*展开/删除无效的块到最后
+//
+//另外：
+//*当我们停止铸造时清楚状态
+//*当我们没有铸造时设置父级（所以它总是当前的）
 type speculativeChain struct {
 	head                       *types.Block
 	unappliedBlocks            *lane.Deque

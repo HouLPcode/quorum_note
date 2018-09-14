@@ -56,6 +56,7 @@ func New(ctx *node.ServiceContext, chainConfig *params.ChainConfig, raftId, raft
 }
 
 // Backend interface methods:
+// Backend wraps all methods required for mining
 
 func (service *RaftService) AccountManager() *accounts.Manager { return service.accountManager }
 func (service *RaftService) BlockChain() *core.BlockChain      { return service.blockchain }
