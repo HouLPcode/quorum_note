@@ -308,8 +308,7 @@ func (minter *minter) mintNewBlock() {
 	defer minter.mu.Unlock()
 
 	work := minter.createWork()
-	transactions :=time.Sleep(time.Second)
-} minter.getTransactions()
+	transactions := minter.getTransactions()
 
 	committedTxes, publicReceipts, privateReceipts, logs := work.commitTransactions(transactions, minter.chain)
 	txCount := len(committedTxes)
