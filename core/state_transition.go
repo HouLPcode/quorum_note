@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/private"
+	"time"
 )
 
 var (
@@ -279,7 +280,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 		} else {
 			to = st.to().Address()
 		}
+		//调用evm开始执行合约
+		t := time.Now()
 		ret, st.gas, vmerr = evm.Call(sender, to, data, st.gas, st.value)
+		log.Info("evm call time",time.Since(t))
 	}
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)
