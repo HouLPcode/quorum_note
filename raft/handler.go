@@ -418,9 +418,9 @@ func (pm *ProtocolManager) startRaft() {
 	raftConfig := &etcdRaft.Config{
 		Applied:       lastAppliedIndex,
 		ID:            uint64(pm.raftId),
-		//此处提高心跳和选举时间
-		ElectionTick:  100, // NOTE: cockroach sets this to 15
-		HeartbeatTick: 10,  // NOTE: cockroach sets this to 5
+		//此处提高心跳和选举时间????????????????????????????????????????????????
+		ElectionTick:  10, // NOTE: cockroach sets this to 15
+		HeartbeatTick: 1,  // NOTE: cockroach sets this to 5
 		Storage:       pm.raftStorage,
 
 		// NOTE, from cockroach:
@@ -434,7 +434,7 @@ func (pm *ProtocolManager) startRaft() {
 
 		// MaxSizePerMsg controls how many Raft log entries the leader will send to
 		// followers in a single MsgApp.
-		MaxSizePerMsg: 4096*4, // NOTE: in cockroachdb this is 16*1024
+		MaxSizePerMsg: 4096, // NOTE: in cockroachdb this is 16*1024
 
 		// MaxInflightMsgs controls how many in-flight messages Raft will send to
 		// a follower without hearing a response. The total number of Raft log

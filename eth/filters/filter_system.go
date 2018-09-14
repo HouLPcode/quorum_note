@@ -58,7 +58,8 @@ const (
 
 	// txChanSize is the size of channel listening to TxPreEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 409600//启动命令中指定交易池大小为65W
+	// TODO:此处是否需要调整
+	txChanSize = 4096//启动命令中指定交易池大小为65W
 	// rmLogsChanSize is the size of channel listening to RemovedLogsEvent.
 	rmLogsChanSize = 10
 	// logsChanSize is the size of channel listening to LogsEvent.
