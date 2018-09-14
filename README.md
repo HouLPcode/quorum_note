@@ -1,6 +1,6 @@
 # Quorum
 
-<a href="https://quorumslack.azurewebsites.net" target="_blank" rel="noopener"><img title="Quorum Slack" src="https://quorumslack.azurewebsites.net/badge.svg" alt="Quorum Slack" /></a>
+<a href="https://clh7rniov2.execute-api.us-east-1.amazonaws.com/Express/" target="_blank" rel="noopener"><img title="Quorum Slack" src="https://clh7rniov2.execute-api.us-east-1.amazonaws.com/Express/badge.svg" alt="Quorum Slack" /></a>
 
 Quorum is an Ethereum-based distributed ledger protocol with transaction/contract privacy and new consensus mechanisms.
 
@@ -109,7 +109,7 @@ at block: 679 (Tue, 15 Nov 2016 00:01:05 UTC)
 }
 ```
 
-Note in particular the `v` field of "0x25" (37 in decimal) which marks this transaction as having a private payload (input).
+Note in particular the `v` field value of "0x25" or "0x26" (37 or 38 in decimal) which marks this transaction as having a private payload (input).
 
 ## Demonstrating Privacy
 Documentation detailing steps to demonstrate the privacy features of Quorum can be found in [quorum-examples/7nodes/README](https://github.com/jpmorganchase/quorum-examples/tree/master/examples/7nodes/README.md).
@@ -128,6 +128,7 @@ Further documentation can be found in the [docs](docs/) folder and on the [wiki]
 * [quorum-examples](https://github.com/jpmorganchase/quorum-examples): example quorum clusters
 * [quorum-tools](https://github.com/jpmorganchase/quorum-tools): local cluster orchestration, and integration testing tool
 * [Quorum Wiki](https://github.com/jpmorganchase/quorum/wiki)
+* [Quorum Community Slack Inviter](https://clh7rniov2.execute-api.us-east-1.amazonaws.com/Express/): Quorum Slack community entry point
 
 ## Third Party Tools/Libraries
 
@@ -135,11 +136,13 @@ The following Quorum-related libraries/applications have been created by Third P
 
 * [Quorum Blockchain Explorer](https://github.com/blk-io/blk-explorer-free) - a Blockchain Explorer for Quorum which supports viewing private transactions
 * [Quorum-Genesis](https://github.com/davebryson/quorum-genesis) - A simple CL utility for Quorum to help populate the genesis file with voters and makers
-* [Quorum Maker](https://github.com/synechron-finlabs/quorum-maker/tree/development) - a utility to create Quorum nodes
+* [Quorum Maker](https://github.com/synechron-finlabs/quorum-maker/) - a utility to create Quorum nodes
 * [QuorumNetworkManager](https://github.com/ConsenSys/QuorumNetworkManager) - makes creating & managing Quorum networks easy
 * [ERC20 REST service](https://github.com/blk-io/erc20-rest-service) - a Quorum-supported RESTful service for creating and managing ERC-20 tokens
 * [Nethereum Quorum](https://github.com/Nethereum/Nethereum/tree/master/src/Nethereum.Quorum) - a .NET Quorum adapter
 * [web3j-quorum](https://github.com/web3j/quorum) - an extension to the web3j Java library providing support for the Quorum API
+* [Apache Camel](http://github.com/apache/camel) - an Apache Camel component providing support for the Quorum API using web3j library. Here is the artcile describing how to use Apache Camel with Ethereum and Quorum https://medium.com/@bibryam/enterprise-integration-for-ethereum-fa67a1577d43
+
 
 ## Contributing
 

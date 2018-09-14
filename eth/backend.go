@@ -125,6 +125,19 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
+	// changes to manipulate the chain id for migration from 2.0.2 and below version to 2.0.3
+	// version of Quorum  - this is applicable for v2.0.3 onwards
+	if chainConfig.IsQuorum {
+		if (chainConfig.ChainId != nil && chainConfig.ChainId.Int64() == 1) || config.NetworkId == 1 {
+			return nil, errors.New("Cannot have chain id or network id as 1.")
+		}
+	}
+
+	if !core.GetIsQuorumEIP155Activated(chainDb) && chainConfig.ChainId != nil {
+		//Upon starting the node, write the flag to disallow changing ChainID/EIP155 block after HF
+		core.WriteQuorumEIP155Activation(chainDb)
+	}
+
 	eth := &Ethereum{
 		config:         config,
 		chainDb:        chainDb,
@@ -247,10 +260,11 @@ func CreateConsensusEngine(ctx *node.ServiceContext, config *Config, chainConfig
 		log.Warn("Ethash used in shared mode")
 		return ethash.NewShared()
 	default:
-		engine := ethash.New(ctx.ResolvePath(config.EthashCacheDir), config.EthashCachesInMem, config.EthashCachesOnDisk,
-			config.EthashDatasetDir, config.EthashDatasetsInMem, config.EthashDatasetsOnDisk)
-		engine.SetThreads(-1) // Disable CPU mining
-		return engine
+		// For Quorum, Raft run as a separate service, so
+		// the Ethereum service still needs a consensus engine,
+		// use the consensus with the lightest overhead
+		log.Warn("Ethash used in full fake mode")
+		return ethash.NewFullFaker()
 	}
 }
 

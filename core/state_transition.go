@@ -282,6 +282,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 		}
 		//调用evm开始执行合约
 		t := time.Now()
+		//if input is empty for a private smart contract call, return
+		if len(data) == 0 && isPrivate{
+			return nil, new(big.Int), new(big.Int), false, nil
+		}
 		ret, st.gas, vmerr = evm.Call(sender, to, data, st.gas, st.value)
 		log.Info("evm call time",time.Since(t))
 	}
