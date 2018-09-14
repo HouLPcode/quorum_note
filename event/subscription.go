@@ -26,18 +26,22 @@ import (
 
 // Subscription represents a stream of events. The carrier of the events is typically a
 // channel, but isn't part of the interface.
+// Subscription代表一系列的事件。事件的承载者是典型的通道，但不是接口的一部分
 //
 // Subscriptions can fail while established. Failures are reported through an error
 // channel. It receives a value if there is an issue with the subscription (e.g. the
 // network connection delivering the events has been closed). Only one value will ever be
 // sent.
+// 在创建的过程中Subscriptions可能失败，失败信息通过error通道获取。订阅有错误时会收到一个数据
 //
 // The error channel is closed when the subscription ends successfully (i.e. when the
 // source of events is closed). It is also closed when Unsubscribe is called.
+// 订阅成功结束时错误通道会自动关闭，调用Unsubscribe也会关闭
 //
 // The Unsubscribe method cancels the sending of events. You must call Unsubscribe in all
 // cases to ensure that resources related to the subscription are released. It can be
 // called any number of times.
+// Unsubscribe方法取消发送事件。调用Unsubscribe会释放所有相关资源，可以调用多次
 type Subscription interface {
 	Err() <-chan error // returns the error channel
 	Unsubscribe()      // cancels sending of events, closing the error channel
@@ -46,6 +50,7 @@ type Subscription interface {
 // NewSubscription runs a producer function as a subscription in a new goroutine. The
 // channel given to the producer is closed when Unsubscribe is called. If fn returns an
 // error, it is sent on the subscription's error channel.
+// 入参是生产者函数，在单独的goroutine中运行
 func NewSubscription(producer func(<-chan struct{}) error) Subscription {
 	s := &funcSub{unsub: make(chan struct{}), err: make(chan error, 1)}
 	go func() {
@@ -206,7 +211,7 @@ func (s *resubscribeSub) backoffWait() bool {
 }
 
 // SubscriptionScope provides a facility to unsubscribe multiple subscriptions at once.
-//
+//一次取消多个订阅
 // For code that handle more than one subscription, a scope can be used to conveniently
 // unsubscribe all of them with a single call. The example demonstrates a typical use in a
 // larger program.

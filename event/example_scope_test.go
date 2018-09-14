@@ -21,13 +21,75 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/event"
+	"time"
 )
+
+//一次关闭多个订阅
+func ExampleSubscriptionScope_Track() {
+	var feed1 event.Feed
+	var feed2 event.Feed
+	var feed3 event.Feed
+	var feedscope event.SubscriptionScope
+	ch := make(chan int)
+	//跟踪订阅的事件
+	fs1 := feedscope.Track(feed1.Subscribe(ch))
+	fs2 := feedscope.Track(feed2.Subscribe(ch))
+	fs3 := feedscope.Track(feed3.Subscribe(ch))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case v := <-ch:
+				fmt.Println(v)
+			case <-fs1.Err():
+				fmt.Println("feed1 close")
+				return
+			case <-fs2.Err():
+				fmt.Println("feed2 close")
+				return
+			case <-fs3.Err():
+				fmt.Println("feed3 close")
+				return
+			}
+		}
+	}()
+
+	fmt.Println("subscribe feed count", feedscope.Count())
+
+	feed1.Send(1)
+	feed2.Send(2)
+	feed3.Send(3)
+	//等待一段时间发送处理完后再关闭
+	time.Sleep(time.Second)
+	fs1.Unsubscribe()
+	fmt.Println("subscribe feed count", feedscope.Count())
+
+	feed1.Send(4)
+	time.Sleep(time.Second)
+
+	//一次关闭所有订阅事件
+	feedscope.Close()
+	wg.Wait()
+
+	// Output:
+	// subscribe feed count 3
+	// 1
+	// 2
+	// 3
+	// subscribe feed count 2
+	// feed1 close
+}
 
 // This example demonstrates how SubscriptionScope can be used to control the lifetime of
 // subscriptions.
+//此示例演示了如何使用SubscriptionScope控制订阅的生命周期。
 //
 // Our example program consists of two servers, each of which performs a calculation when
 // requested. The servers also allow subscribing to results of all computations.
+// 包含两个计算服务，通过订阅时间获取计算结果
 type divServer struct{ results event.Feed }
 type mulServer struct{ results event.Feed }
 
@@ -45,6 +107,7 @@ func (s *mulServer) do(a, b int) int {
 
 // The servers are contained in an App. The app controls the servers and exposes them
 // through its API.
+// 服务包含在APP中。app负责控制服务和暴漏API
 type App struct {
 	divServer
 	mulServer

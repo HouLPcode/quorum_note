@@ -26,12 +26,15 @@ var errBadChannel = errors.New("event: Subscribe argument does not have sendable
 
 // Feed implements one-to-many subscriptions where the carrier of events is a channel.
 // Values sent to a Feed are delivered to all subscribed channels simultaneously.
-//
+//Feed实现一对多订阅，其中事件的载体是通道。发送到Feed的值同时传递到所有订阅的通道。
+
 // Feeds can only be used with a single type. The type is determined by the first Send or
 // Subscribe operation. Subsequent calls to these methods panic if the type does not
 // match.
-//
+//Feed只能用于单一类型。 类型由第一个Send或Subscribe操作确定。 如果类型不匹配，对这些方法的后续调用会发生panic。
+
 // The zero value is ready to use.
+// 零值可以使用
 type Feed struct {
 	once      sync.Once        // ensures that init only runs once
 	sendLock  chan struct{}    // sendLock has a one-element buffer and is empty when held.It protects sendCases.
@@ -67,9 +70,12 @@ func (f *Feed) init() {
 
 // Subscribe adds a channel to the feed. Future sends will be delivered on the channel
 // until the subscription is canceled. All channels added must have the same element type.
-//
+//Subscribe向Feed中添加通道。 之后的send将会发送到该通道，直至订阅被取消。 添加的所有通道必须具有相同的元素类型。
+
 // The channel should have ample buffer space to avoid blocking other subscribers.
 // Slow subscribers are not dropped.
+//该通道应具有足够的缓冲空间，以避免阻塞其他订阅者。 缓慢的订阅者不会被删除。
+// 此处的通道一般都是 chan<-
 func (f *Feed) Subscribe(channel interface{}) Subscription {
 	f.once.Do(f.init)
 
@@ -125,7 +131,9 @@ func (f *Feed) remove(sub *feedSub) {
 }
 
 // Send delivers to all subscribed channels simultaneously.
+// 同时发送给所有的订阅通道
 // It returns the number of subscribers that the value was sent to.
+// 返回接收该数据的订阅者数量
 func (f *Feed) Send(value interface{}) (nsent int) {
 	f.once.Do(f.init)
 	<-f.sendLock

@@ -155,11 +155,14 @@ func (chain *speculativeChain) removeProposedTxes(block *types.Block) {
 	chain.proposedTxes.Remove(minedTxInterfaces...)
 }
 
+//返回没有propose的交易集
 func (chain *speculativeChain) withoutProposedTxes(addrTxes AddressTxes) AddressTxes {
 	newMap := make(AddressTxes)
 
+	//map[common.Address]types.Transactions
 	for addr, txes := range addrTxes {
 		filteredTxes := make(types.Transactions, 0)
+		//[]*Transaction
 		for _, tx := range txes {
 			if !chain.proposedTxes.Has(tx.Hash()) {
 				filteredTxes = append(filteredTxes, tx)

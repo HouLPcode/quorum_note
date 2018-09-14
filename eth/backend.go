@@ -177,8 +177,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, config.RaftMode); err != nil {
 		return nil, err
 	}
+	//TODO: 此处有必要启动miner吗？？？？？？？？？？？
 	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
-	eth.miner.SetExtra(makeExtraData(config.ExtraData, eth.chainConfig.IsQuorum))
+	eth.miner.SetExtra(makeExtraData(config.ExtraData, eth.chainConfig.IsQuorum))//此处的extra在raft下没有使用
 
 	eth.ApiBackend = &EthApiBackend{eth, nil}
 	gpoParams := config.GPO

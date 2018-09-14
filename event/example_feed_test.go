@@ -22,6 +22,20 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 )
 
+type param struct{
+	feed event.Feed
+	scope event.SubscriptionScope
+}
+
+func newParam() *param{
+	return &param{}
+}
+
+func ExampleFeed_Send() {
+	p := newParam()
+	p.feed.Send()
+}
+
 func ExampleFeed_acknowledgedEvents() {
 	// This example shows how the return value of Send can be used for request/reply
 	// interaction between event consumers and producers.
@@ -42,7 +56,7 @@ func ExampleFeed_acknowledgedEvents() {
 			for {
 				select {
 				case ev := <-ch:
-					fmt.Println(ev.i) // "process" the event
+					fmt.Println(ev.i) // "process" the event 时间处理
 					ev.ack <- struct{}{}
 				case <-done:
 					return
@@ -56,6 +70,7 @@ func ExampleFeed_acknowledgedEvents() {
 	for i := 0; i < 3; i++ {
 		acksignal := make(chan struct{})
 		n := feed.Send(ackedEvent{i, acksignal})
+		//阻塞等待所有订阅者响应
 		for ack := 0; ack < n; ack++ {
 			<-acksignal
 		}

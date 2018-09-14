@@ -336,6 +336,7 @@ func (minter *minter) mintNewBlock() {
 	header.Root = work.publicState.IntermediateRoot(minter.chain.Config().IsEIP158(work.header.Number))
 
 	// NOTE: < QuorumChain creates a signature here and puts it in header.Extra. >
+	// TODO: 怎么设置raft下的extra字段？？？
 
 	allReceipts := append(publicReceipts, privateReceipts...)
 	header.Bloom = types.CreateBloom(allReceipts)
@@ -361,6 +362,7 @@ func (minter *minter) mintNewBlock() {
 
 	minter.speculativeChain.extend(block)
 
+	//发送NewMinedBlockEvent事件
 	minter.mux.Post(core.NewMinedBlockEvent{Block: block})
 
 	elapsed := time.Since(time.Unix(0, header.Time.Int64()))

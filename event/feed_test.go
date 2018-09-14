@@ -24,6 +24,67 @@ import (
 	"time"
 )
 
+func TestFeedSend(t *testing.T) {
+	//1. 定义feed
+	var feed Feed
+	//2. 定义通道
+	ch1 := make(chan int)
+	ch2 := make(chan int)
+	//3. 订阅通道，可以多次订阅一个通道,该通道会多次收到该发送的数据
+	sub1 := feed.Subscribe(ch1)
+	sub2 := feed.Subscribe(ch2)
+	sub3 := feed.Subscribe(ch1)
+	sub4 := feed.Subscribe(ch1)
+	//4.事件处理
+	go func() {
+		t.Log("create goroutine 1")
+		for v := range ch1 {
+			t.Log("goroutine 1 received data ", v)
+		}
+	}()
+	go func() {
+		t.Log("create goroutine 2")
+		for v := range ch2 {
+			t.Log("goroutine 2 received data ", v)
+		}
+	}()
+	//go func() {
+	//	t.Log("create goroutine 3")
+	//	for v := range ch1 {
+	//		t.Log("goroutine 3 received data ", v)
+	//	}
+	//}()
+	//go func() {
+	//	t.Log("create goroutine 4")
+	//	for v := range ch2 {
+	//		t.Log("goroutine 4 received data ", v)
+	//	}
+	//}()
+	time.Sleep(time.Second)
+	//5.发送事件
+	t.Log("feed send",feed.Send(1))
+	//t.Log("feed send",feed.Send(2))
+	//t.Log("feed send",feed.Send(3))
+	time.Sleep(time.Second*5)
+
+	//取消订阅，通道会自动关闭
+	sub1.Unsubscribe()
+	sub2.Unsubscribe()
+	sub3.Unsubscribe()
+	sub4.Unsubscribe()
+	select {
+	case _, ok := <-sub1.Err():
+		if ok {
+			t.Errorf("%d: error channel not closed after unsubscribe 1")
+		}
+	case _, ok := <-sub2.Err():
+		if ok {
+			t.Errorf("%d: error channel not closed after unsubscribe 2")
+		}
+	}
+	time.Sleep(time.Second)
+}
+
 func TestFeedPanics(t *testing.T) {
 	{
 		var f Feed
@@ -181,7 +242,7 @@ func TestFeedSubscribeBlockedPost(t *testing.T) {
 	wg.Add(nsends)
 	for i := 0; i < nsends; i++ {
 		go func() {
-			feed.Send(99)
+			t.Log("feed send",feed.Send(99))
 			wg.Done()
 		}()
 	}
@@ -193,9 +254,11 @@ func TestFeedSubscribeBlockedPost(t *testing.T) {
 	// The number of receives on ch2 depends on scheduling.
 	for i := 0; i < nsends; {
 		select {
-		case <-ch1:
+		case v := <-ch1:
 			i++
-		case <-ch2:
+			t.Log("<-ch1",v)
+		case v2 := <-ch2:
+			t.Log("<-ch2",v2)
 		}
 	}
 }

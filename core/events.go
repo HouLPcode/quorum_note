@@ -22,6 +22,7 @@ import (
 )
 
 // TxPreEvent is posted when a transaction enters the transaction pool.
+// 交易进入交易池
 type TxPreEvent struct{ Tx *types.Transaction }
 
 // PendingLogsEvent is posted pre mining and notifies of pending logs.
