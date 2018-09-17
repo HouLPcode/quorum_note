@@ -398,6 +398,7 @@ func (bc *BlockChain) State() (*state.StateDB, *state.StateDB, error) {
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
+// StateAt根据特定时间点返回新的可变状态
 func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, *state.StateDB, error) {
 	publicStateDb, publicStateDbErr := state.New(root, bc.stateCache)
 	if publicStateDbErr != nil {

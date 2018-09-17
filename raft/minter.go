@@ -110,12 +110,15 @@ func (minter *minter) stop() {
 // Notify the minting loop that minting should occur, if it's not already been
 // requested. Due to the use of a RingChannel, this function is idempotent if
 // called multiple times before the minting occurs.
+//如果尚未请求mined，则通知mined loop应该开始挖块。
+//由于使用了RingChannel，如果在mined之前多次调用，此功能是等效的。
 func (minter *minter) requestMinting() {
 	minter.shouldMine.In() <- struct{}{}
 }
 
 type AddressTxes map[common.Address]types.Transactions
 
+//接收newHeadBlock到预测链，ChainHeadEvent事件触发
 func (minter *minter) updateSpeculativeChainPerNewHead(newHeadBlock *types.Block) {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
@@ -236,6 +239,7 @@ func (minter *minter) mintingLoop() {
 	time.Sleep(time.Second)
 }
 
+//获取微妙级的当前时间
 func generateNanoTimestamp(parent *types.Block) (tstamp int64) {
 	parentTime := parent.Time().Int64()
 	tstamp = time.Now().UnixNano()
@@ -254,6 +258,7 @@ func (minter *minter) createWork() *work {
 	parentNumber := parent.Number()
 	tstamp := generateNanoTimestamp(parent)
 
+	//构建header结构体
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     parentNumber.Add(parentNumber, common.Big1),

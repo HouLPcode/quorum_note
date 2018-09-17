@@ -18,7 +18,7 @@ import (
 // Additionally:
 // * clear state when we stop minting
 // * set the parent when we're not minting (so it's always current)
-//投机链表示我们已经铸造的块，这些块尚未被链接接入，在链中相互构建。 它有三个基本操作：
+//预测链表示我们已经铸造的块，这些块尚未被链接接入，在链中相互构建。 它有三个基本操作：
 //*添加新块到结尾
 //*接受/删除最旧的块
 //*展开/删除无效的块到最后
@@ -28,20 +28,22 @@ import (
 //*当我们没有铸造时设置父级（所以它总是当前的）
 type speculativeChain struct {
 	head                       *types.Block
-	unappliedBlocks            *lane.Deque
+	unappliedBlocks            *lane.Deque//新挖出的区块，还没有上链
 	expectedInvalidBlockHashes *set.Set // This is thread-safe. This set is referred to as our "guard" below.
+	//新挖出的区块中的交易，这些交易还没withoutProposedTxes有上链，经过raft共识之后上链
 	proposedTxes               *set.Set // This is thread-safe.
 }
 
 func newSpeculativeChain() *speculativeChain {
 	return &speculativeChain{
 		head:                       nil,
-		unappliedBlocks:            lane.NewDeque(),
+		unappliedBlocks:            lane.NewDeque(),//双端队列
 		expectedInvalidBlockHashes: set.New(),
 		proposedTxes:               set.New(),
 	}
 }
 
+//清空所有内容，指定block为头块
 func (chain *speculativeChain) clear(block *types.Block) {
 	chain.head = block
 	chain.unappliedBlocks = lane.NewDeque()
@@ -50,6 +52,8 @@ func (chain *speculativeChain) clear(block *types.Block) {
 }
 
 // Append a new speculative block
+// 添加一个预测区块
+// 区块存储在unappliedBlocks，区块中的交易存储在proposedTxes
 func (chain *speculativeChain) extend(block *types.Block) {
 	chain.head = block
 	chain.recordProposedTransactions(block.Transactions())
@@ -64,6 +68,7 @@ func (chain *speculativeChain) setHead(block *types.Block) {
 }
 
 // Accept this block, removing it from the speculative chain
+// 接受区块，并从预测链中删除
 func (chain *speculativeChain) accept(acceptedBlock *types.Block) {
 	earliestProposedI := chain.unappliedBlocks.Shift()
 	var earliestProposed *types.Block
@@ -78,6 +83,10 @@ func (chain *speculativeChain) accept(acceptedBlock *types.Block) {
 	// 3. This block is different from the block we proposed, (also) meaning new blocks are still coming in from the old
 	//    leader, but unlike the first scenario, we need to clear all of the speculative chain state because the
 	//    `acceptedBlock` takes precedence over our speculative state.
+	//有三种可能的情况：
+	//1.我们没有这个区块（或任何建议的区块）的记录，这意味着其他人创造了它，我们应该将其添加为我们预测链的头块。 旧leader的新区块仍然存在。
+	//2.这个区块是我们提出的第一个突出的区块。
+	//3.这个块与我们提出的块不同，（也）意味着新的块仍然来自旧的领导者，但与第一个场景不同，我们需要清除所有的推测链状态，因为`acceptedBlock`优先 超过我们的投机状态。
 	if earliestProposed == nil {
 		chain.head = acceptedBlock
 	} else if expectedBlock := earliestProposed.Hash() == acceptedBlock.Hash(); expectedBlock {
@@ -91,6 +100,7 @@ func (chain *speculativeChain) accept(acceptedBlock *types.Block) {
 }
 
 // Remove all blocks in the chain from the specified one until the end
+// 从预测链中移除所有区块
 func (chain *speculativeChain) unwindFrom(invalidHash common.Hash, headBlock *types.Block) {
 
 	// check our "guard" to see if this is a (descendant) block we're
@@ -143,6 +153,9 @@ func (chain *speculativeChain) unwindFrom(invalidHash common.Hash, headBlock *ty
 // with the same transactions. This is necessary because the TX pool will keep
 // supplying us these transactions until they are in the chain (after having
 // flown through raft).
+// 跟踪自上一个ChainHeadEvent以来我们放入所有新开采的块中的tx，并将它们过滤掉，这样我们就不会尝试创建具有相同事务的块。
+// 这是必要的，因为TX池将继续向我们提供这些交易，直到它们上链（通过raft之后）。
+// 把参数txs加入到proposedTxes中
 func (chain *speculativeChain) recordProposedTransactions(txes types.Transactions) {
 	txHashIs := make([]interface{}, len(txes))
 	for i, tx := range txes {
@@ -158,6 +171,7 @@ func (chain *speculativeChain) recordProposedTransactions(txes types.Transaction
 //
 // It's important to remove hashes from this blacklist (once we know we don't
 // need them in there anymore) so that it doesn't grow endlessly.
+// 从proposeTxs中删除block中包含的交易
 func (chain *speculativeChain) removeProposedTxes(block *types.Block) {
 	minedTxes := block.Transactions()
 	minedTxInterfaces := make([]interface{}, len(minedTxes))
@@ -172,7 +186,7 @@ func (chain *speculativeChain) removeProposedTxes(block *types.Block) {
 	chain.proposedTxes.Remove(minedTxInterfaces...)
 }
 
-//返回没有propose的交易集
+//筛选出不在proposedTxes中的交易
 func (chain *speculativeChain) withoutProposedTxes(addrTxes AddressTxes) AddressTxes {
 	newMap := make(AddressTxes)
 
