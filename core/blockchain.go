@@ -173,6 +173,7 @@ func NewBlockChain(chainDb ethdb.Database, config *params.ChainConfig, engine co
 		}
 	}
 	// Take ownership of this particular state
+	// 获取当前状态的所有权
 	go bc.update()
 	return bc, nil
 }
@@ -183,6 +184,7 @@ func (bc *BlockChain) getProcInterrupt() bool {
 
 // loadLastState loads the last known chain state from the database. This method
 // assumes that the chain manager mutex is held.
+// 从数据库中加载最新的链状态
 func (bc *BlockChain) loadLastState() error {
 	// Restore the last known head block
 	head := GetHeadBlockHash(bc.chainDb)

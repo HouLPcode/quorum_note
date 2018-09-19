@@ -111,7 +111,7 @@ var (
 
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
-//blockChain提供区块链和当前gas price的状态，以便在tx pool和事件订阅者中进行一些预先检查。
+// blockChain提供区块链和当前gas price的状态，以便在tx pool和事件订阅者中进行一些预先检查。
 type blockChain interface {
 	CurrentBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
@@ -178,10 +178,12 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 // TxPool contains all currently known transactions. Transactions
 // enter the pool when they are received from the network or submitted
 // locally. They exit the pool when they are included in the blockchain.
-//
+// TxPool包括所有已知的交易。从网络或本地提交的交易进入交易池。当交易存储在区块链上时退出交易池
+
 // The pool separates processable transactions (which can be applied to the
 // current state) and future transactions. Transactions move between those
 // two states over time as they are received and processed.
+// 交易分为可执行交易和未来交易。在接收和处理交易时，交易随着时间的推移在这两个状态之间移动
 type TxPool struct {
 	config       TxPoolConfig
 	chainconfig  *params.ChainConfig
@@ -203,8 +205,7 @@ type TxPool struct {
 
 	pending map[common.Address]*txList         // All currently processable transactions
 	queue   map[common.Address]*txList         // Queued but non-processable transactions
-	//每一个已知账号的最后一次心跳信息的时间
-	beats   map[common.Address]time.Time       // Last heartbeat from each known account
+	beats   map[common.Address]time.Time       // Last heartbeat from each known account 每一个已知账号的最后一次心跳信息的时间
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
@@ -247,7 +248,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 			log.Warn("Failed to rotate transaction journal", "err", err)
 		}
 	}
-	// Subscribe events from blockchain
+	// Subscribe events from blockchain 订阅blockchain的ChainHeadEvent事件
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
 
 	// Start the event loop and return
@@ -298,7 +299,7 @@ func (pool *TxPool) loop() {
 			return
 
 			// Handle stats reporting ticks
-		case <-report.C:// 每8秒报告一次txpool状态
+		case <-report.C:// 每8秒输出txpool中executable，queue，stales的数量
 			pool.mu.RLock()
 			pending, queued := pool.stats()
 			stales := pool.priced.stales
@@ -311,7 +312,7 @@ func (pool *TxPool) loop() {
 
 			// Handle inactive account transaction eviction
 			// 删除queue中超过指定时间的交易
-		case <-evict.C:
+		case <-evict.C://每分钟便利一次queue中的交易，删除交易池中超时的交易
 			pool.mu.Lock()
 			for addr := range pool.queue {
 				// Skip local transactions from the eviction mechanism
@@ -328,7 +329,7 @@ func (pool *TxPool) loop() {
 			pool.mu.Unlock()
 
 			// Handle local transaction journal rotation
-		case <-journal.C:
+		case <-journal.C://每1小时将本地交易写入日志文件
 			if pool.journal != nil {
 				pool.mu.Lock()
 				if err := pool.journal.rotate(pool.local()); err != nil {
@@ -356,27 +357,31 @@ func (pool *TxPool) lockedReset(oldHead, newHead *types.Header) {
 //生成新的currentState和pendingState
 //将pending中的部分交易移到queue里面
 //将queue里面的交易移入到pending里面
+// 新建txpool和ChainHeadEvent时调用
 func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// If we're reorging an old state, reinject all dropped transactions
+	// 如果旧的区块领先，重新插入所有删除的交易
 	var reinject types.Transactions
 
 	if oldHead != nil && oldHead.Hash() != newHead.ParentHash {
 		// If the reorg is too deep, avoid doing it (will happen during fast sync)
-		oldNum := oldHead.Number.Uint64()
-		newNum := newHead.Number.Uint64()
+		// 如果改组太深，不做这个（发生在fast同步时）
+		oldNum := oldHead.Number.Uint64()//久区块号
+		newNum := newHead.Number.Uint64()//新区块号
 
-		////如果老得区块号比新的区块号大64以上, 那么取消重建
+		//如果新旧区块头差64块以上, 那么取消重建
 		if depth := uint64(math.Abs(float64(oldNum) - float64(newNum))); depth > 64 {
 			log.Warn("Skipping deep transaction reorg", "depth", depth)
 		} else {
 			// Reorg seems shallow enough to pull in all transactions into memory
+			// Reorg将所有的交易加载到内存中
 			var discarded, included types.Transactions
 
 			var (
 				rem = pool.chain.GetBlock(oldHead.Hash(), oldHead.Number.Uint64())
 				add = pool.chain.GetBlock(newHead.Hash(), newHead.Number.Uint64())
 			)
-			// 如果老的高度大于新的.那么需要把多的全部删除
+			// 如果老的高度大于新的.那么需要把多的交易存储在discarded中等待删除
 			for rem.NumberU64() > add.NumberU64() {
 				discarded = append(discarded, rem.Transactions()...)
 				if rem = pool.chain.GetBlock(rem.ParentHash(), rem.NumberU64()-1); rem == nil {
@@ -384,7 +389,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 					return
 				}
 			}
-			// 如果新的高度大于老的, 那么需要增加
+			// 如果新的高度大于老的, 那么把多的交易存储在included中等待添加
 			for add.NumberU64() > rem.NumberU64() {
 				included = append(included, add.Transactions()...)
 				if add = pool.chain.GetBlock(add.ParentHash(), add.NumberU64()-1); add == nil {
@@ -405,8 +410,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 					return
 				}
 			}
-			// 找出所有存在discard里面,但是不在included里面的值.
-			// 需要等下把这些交易重新插入到pool里面。
+			// 找出discard有,included没有的交易. 等待重新插入到pool里面。
 			reinject = types.TxDifference(discarded, included)
 		}
 	}
@@ -839,7 +843,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) error {
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid,
-// whilst assuming the transaction pool lock is already held.
+// whilst assuming the transaction pool loaddresssByHeartbeatck is already held.
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) error {
 	// Add the batch of transactions, tracking the accepted ones
 	dirty := make(map[common.Address]struct{})
@@ -1155,7 +1159,8 @@ func (a addresssByHeartbeat) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 // accountSet is simply a set of addresses to check for existence, and a signer
 // capable of deriving addresses from transactions.
-//accountSet只是一组用来检查存在的账号地址，以及一个能够从交易中获取地址的签名者
+// accountSet只是一组用来检查存在的账号地址，以及一个能够从交易中获取地址的签名者
+// 存储所有已知的账户地址
 type accountSet struct {
 	accounts map[common.Address]struct{}
 	signer   types.Signer

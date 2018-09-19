@@ -336,6 +336,7 @@ func (s Transactions) GetRlp(i int) []byte {
 }
 
 // Returns a new set t which is the difference between a to b
+// 返回a有b没有的交易
 func TxDifference(a, b Transactions) (keep Transactions) {
 	keep = make(Transactions, 0, len(a))
 

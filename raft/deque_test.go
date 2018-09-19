@@ -4,7 +4,7 @@ import (
 	"gopkg.in/oleiade/lane.v1"
 	"testing"
 )
-
+// 循环队列
 func TestDeque(t *testing.T) {
 	mdeque := lane.NewDeque()
 	mdeque.Append("1")
