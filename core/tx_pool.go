@@ -299,7 +299,7 @@ func (pool *TxPool) loop() {
 			return
 
 			// Handle stats reporting ticks
-		case <-report.C:// 每8秒输出txpool中executable，queue，stales的数量
+		case <-report.C: // 每8秒输出txpool中executable，queue，stales的数量
 			pool.mu.RLock()
 			pending, queued := pool.stats()
 			stales := pool.priced.stales
@@ -312,7 +312,7 @@ func (pool *TxPool) loop() {
 
 			// Handle inactive account transaction eviction
 			// 删除queue中超过指定时间的交易
-		case <-evict.C://每分钟便利一次queue中的交易，删除交易池中超时的交易
+		case <-evict.C: //每分钟便利一次queue中的交易，删除交易池中超时的交易
 			pool.mu.Lock()
 			for addr := range pool.queue {
 				// Skip local transactions from the eviction mechanism
@@ -329,7 +329,7 @@ func (pool *TxPool) loop() {
 			pool.mu.Unlock()
 
 			// Handle local transaction journal rotation
-		case <-journal.C://每1小时将本地交易写入日志文件
+		case <-journal.C: //每1小时将本地交易写入日志文件
 			if pool.journal != nil {
 				pool.mu.Lock()
 				if err := pool.journal.rotate(pool.local()); err != nil {
@@ -366,8 +366,8 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	if oldHead != nil && oldHead.Hash() != newHead.ParentHash {
 		// If the reorg is too deep, avoid doing it (will happen during fast sync)
 		// 如果改组太深，不做这个（发生在fast同步时）
-		oldNum := oldHead.Number.Uint64()//久区块号
-		newNum := newHead.Number.Uint64()//新区块号
+		oldNum := oldHead.Number.Uint64() //久区块号
+		newNum := newHead.Number.Uint64() //新区块号
 
 		//如果新旧区块头差64块以上, 那么取消重建
 		if depth := uint64(math.Abs(float64(oldNum) - float64(newNum))); depth > 64 {
@@ -435,7 +435,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// any transactions that have been included in the block or
 	// have been invalidated because of another transaction (e.g.
 	// higher gas price)
-	// 验证pending transaction池里面的交易，会移除所有已经存在区块链里面的交易，或者是因为其他交易导致不可用的交易(比如有一个更高的gasPrice)
+	// 验证pending池里面的交易，会移除所有已经存在区块链里面的交易，或者是因为其他交易导致不可用的交易(比如有一个更高的gasPrice)
 	// demote 降级 将pending中的一些交易降级到queue里面
 	pool.demoteUnexecutables()
 
@@ -608,7 +608,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Ether value is not currently supported on private transactions
 	if tx.IsPrivate() && (tx.Value().Sign() != 0) {
-		return ErrEtherValueUnsupported;
+		return ErrEtherValueUnsupported
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
@@ -751,6 +751,7 @@ func (pool *TxPool) journalTx(from common.Address, tx *types.Transaction) {
 // promoteTx adds a transaction to the pending (processable) list of transactions.
 // 添加一个交易到pending中
 // Note, this method assumes the pool lock is held! 促进
+// 交易进入pending池中的时候广播交易
 func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.Transaction) {
 	// Try to insert the transaction into the pending queue
 	if pool.pending[addr] == nil {
@@ -780,6 +781,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 		pool.priced.Put(tx)
 	}
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
+	// 设置之后交易池中账户的nonce值
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 	// 此处关闭单独的线程？？？？？？？？？？？？？？？？？？？？？？？？？？？？
@@ -921,7 +923,7 @@ func (pool *TxPool) removeTx(hash common.Hash) {
 // promoteExecutables moves transactions that have become processable from the
 // future queue to the set of pending transactions. During this process, all
 // invalidated transactions (low nonce, low balance) are deleted.
-//将可以执行的交易从queue移动到pending。在此过程中，所有无效交易（低nonce值，余额不足）将被删除
+//将accounts对应的执行的交易从queue移动到pending。在此过程中，所有无效交易（低nonce值，余额不足）将被删除
 func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 	isQuorum := pool.chainconfig.IsQuorum
 	// Init delayed since tx pool could have been started before any state sync
@@ -994,9 +996,10 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 	if pending > pool.config.GlobalSlots {
 		pendingBeforeCap := pending
 		// Assemble a spam order to penalize large transactors first
-		spammers := prque.New()
+		//汇编垃圾邮件订单，先惩罚大型交易者
+		spammers := prque.New() //优先队列，有键值对
 		for addr, list := range pool.pending {
-			// Only evict transactions from high rollers
+			// Only evict transactions from high rollers 只会驱逐高额交易
 			if !pool.locals.contains(addr) && uint64(list.Len()) > pool.config.AccountSlots {
 				spammers.Push(addr, float32(list.Len()))
 			}
@@ -1102,10 +1105,11 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 // demoteUnexecutables removes invalid and processed transactions from the pools
 // executable/pending queue and any subsequent transactions that become unexecutable
 // are moved back into the future queue.
+// 删除已经上链的交易，另一部分交易pending->>queue中
 func (pool *TxPool) demoteUnexecutables() {
 	// Iterate over all accounts and demote any non-executable transactions
 	for addr, list := range pool.pending {
-		nonce := pool.currentState.GetNonce(addr)
+		nonce := pool.currentState.GetNonce(addr) //此处获取的是主链nonce？删除之前的交易？？
 
 		// Drop all transactions that are deemed too old (low nonce)
 		for _, tx := range list.Forward(nonce) {
@@ -1150,6 +1154,7 @@ type addressByHeartbeat struct {
 	address   common.Address
 	heartbeat time.Time
 }
+
 // 按时间从早到晚排序
 type addresssByHeartbeat []addressByHeartbeat
 
