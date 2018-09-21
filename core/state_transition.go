@@ -218,6 +218,7 @@ func (st *StateTransition) preCheck() error {
 // including the required gas for the operation as well as the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
 func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big.Int, failed bool, err error) {
+	//提前减去gas
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -283,11 +284,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 		//调用evm开始执行合约
 		t := time.Now()
 		//if input is empty for a private smart contract call, return
-		if len(data) == 0 && isPrivate{
+		if len(data) == 0 && isPrivate {
 			return nil, new(big.Int), new(big.Int), false, nil
 		}
 		ret, st.gas, vmerr = evm.Call(sender, to, data, st.gas, st.value)
-		log.Info("evm call time",time.Since(t))
+		log.Info("evm call", "time", time.Since(t))
 	}
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)

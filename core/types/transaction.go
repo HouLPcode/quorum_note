@@ -27,8 +27,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -229,7 +229,7 @@ func (tx *Transaction) Size() common.StorageSize {
 // XXX Rename message to something less arbitrary?
 func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	msg := Message{
-		nonce:      tx.data.AccountNonce,
+		nonce: tx.data.AccountNonce,
 		//此处指定gas price
 		price:      params.TxGasPrice,
 		gasLimit:   new(big.Int).Set(tx.data.GasLimit),
@@ -386,9 +386,10 @@ func (s *TxByPrice) Pop() interface{} {
 // TransactionsByPriceAndNonce represents a set of transactions that can return
 // transactions in a profit-maximising sorted order, while supporting removing
 // entire batches of transactions for non-executable accounts.
+// 利润最大化排序的交易，同时支持删除非可执行帐户的整批交易
 type TransactionsByPriceAndNonce struct {
 	txs    map[common.Address]Transactions // Per account nonce-sorted list of transactions
-	heads  TxByPrice                       // Next transaction for each unique account (price heap)
+	heads  TxByPrice                       // Next transaction for each unique account (price heap) 每个账户gas price最高的交易
 	signer Signer                          // Signer for the set of transactions
 }
 
@@ -425,6 +426,7 @@ func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
 }
 
 // Shift replaces the current best head with the next one from the same account.
+// 更新gas price最高的交易,peek后调用
 func (t *TransactionsByPriceAndNonce) Shift() {
 	acc, _ := Sender(t.signer, t.heads[0])
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {

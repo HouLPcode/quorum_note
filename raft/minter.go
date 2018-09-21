@@ -75,7 +75,7 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		chain:            eth.BlockChain(),
 		shouldMine:       channels.NewRingChannel(1),
 		blockTime:        blockTime,
-		speculativeChain: newSpeculativeChain(),//预测链
+		speculativeChain: newSpeculativeChain(), //预测链
 
 		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
@@ -285,10 +285,12 @@ func (minter *minter) createWork() *work {
 func (minter *minter) getTransactions() *types.TransactionsByPriceAndNonce {
 	//pending中所有的交易
 	allAddrTxes, err := minter.eth.TxPool().Pending()
+	log.Info("hou-----------------------", "allAddrTxes len is ", len(allAddrTxes))
 	if err != nil { // TODO: handle
 		panic(err)
 	}
 	addrTxes := minter.speculativeChain.withoutProposedTxes(allAddrTxes)
+	log.Info("hou-----------------------", "addrTxes len is ", len(addrTxes))
 	signer := types.MakeSigner(minter.chain.Config(), minter.chain.CurrentBlock().Number())
 	return types.NewTransactionsByPriceAndNonce(signer, addrTxes)
 }
@@ -348,7 +350,7 @@ func (minter *minter) mintNewBlock() {
 
 	block := types.NewBlock(header, committedTxes, nil, publicReceipts)
 
-	log.Info("Generated next block", "block num", block.Number(), "num txes", txCount)
+	log.Info("hou--------------Generated next block", "block num", block.Number(), "num txes", txCount)
 
 	deleteEmptyObjects := minter.chain.Config().IsEIP158(block.Number())
 	if _, err := work.publicState.CommitTo(minter.chainDb, deleteEmptyObjects); err != nil {
@@ -358,6 +360,7 @@ func (minter *minter) mintNewBlock() {
 		panic(fmt.Sprint("error committing private state: ", privStateErr))
 	}
 
+	//把新挖出的区块插入预测链中
 	minter.speculativeChain.extend(block)
 
 	//发送NewMinedBlockEvent事件
